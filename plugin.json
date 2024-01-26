@@ -1,0 +1,21 @@
+{
+	"slug": "SampleCreator",
+	"name": "SampleCreator",
+	"version": "2.9.0",
+	"license": "MIT",
+	"author": "@baconpaul, @omricohen",
+	"authorEmail": "",
+	"authorUrl": "",
+	"pluginUrl": "",
+	"manualUrl": "",
+	"sourceUrl": "",
+	"donateUrl": "",
+	"modules": [
+			 {
+				 "slug": "SampleCreator",
+				 "name": "SampleCreator",
+				 "description": "Run your patch, make an SFZ",
+				 "tags": [ "Utility" ]
+			 }
+	]
+}

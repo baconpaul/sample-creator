@@ -1,0 +1,3 @@
+[submodule "libs/sst-rackhelpers"]
+	path = libs/sst-rackhelpers
+	url = https://github.com/surge-synthesizer/sst-rackhelpers
