@@ -14,6 +14,7 @@
 #include <memory>
 #include <atomic>
 #include <cstdint>
+#include <cstdio>
 
 #include "sst/cpputils/ring_buffer.h"
 
@@ -21,6 +22,12 @@
 #include "sst/rackhelpers/ui.h"
 #include "sst/rackhelpers/neighbor_connectable.h"
 #include "sst/rackhelpers/module_connector.h"
+
+#include <ghc/filesystem.hpp>
+namespace fs = ghc::filesystem;
+
+#include <tinywav.h>
+
 
 #define MAX_POLY 16
 
@@ -124,6 +131,9 @@ struct SampleCreatorModule : virtual rack::Module,
     } createState{INACTIVE};
 
 
+    fs::path currentSampleDir{};
+    TinyWav tinyWavControl;
+
     void process(const ProcessArgs &args) override {
         if (createState == INACTIVE && (inputs[INPUT_GO].getVoltage() > 2))
         {
@@ -131,6 +141,9 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = NEW_NOTE;
             wavBlockPosition = 0;
             noteNumber = 60;
+
+            currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator";
+            fs::create_directories(currentSampleDir);
         }
 
 
@@ -149,6 +162,13 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage(ms);
             playbackPos = 0;
             createState = GATED_RECORD;
+
+            auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
+            auto res = tinywav_open_write(&tinyWavControl,
+                                          2, args.sampleRate,
+                                          TW_FLOAT32, TW_INTERLEAVED,
+                                          fn.u8string().c_str());
+
         }
 
         if (playbackPos > args.sampleRate && createState == GATED_RECORD)
@@ -163,6 +183,17 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage("Done");
             createState = SPINDOWN_BUFFER;
             playbackPos = 0;
+            tinywav_close_write(&tinyWavControl);
+        }
+
+        if (createState != SPINDOWN_BUFFER)
+        {
+            float d[2];
+            d[0] = inputs[INPUT_L].getVoltage();
+            d[1] = inputs[INPUT_R].getVoltage();
+
+            // Insanely inefficient
+            tinywav_write_f(&tinyWavControl, d, 1);
         }
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
@@ -180,8 +211,6 @@ struct SampleCreatorModule : virtual rack::Module,
                 pushMessage("New Note");
             }
         }
-
-
 
         playbackPos ++;
     }
