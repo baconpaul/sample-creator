@@ -13,40 +13,41 @@
 #include <vector>
 #include <memory>
 #include <atomic>
+#include <cstdint>
 
+#include "sst/cpputils/ring_buffer.h"
 
 #include "sst/rackhelpers/json.h"
 #include "sst/rackhelpers/ui.h"
 #include "sst/rackhelpers/neighbor_connectable.h"
 #include "sst/rackhelpers/module_connector.h"
 
-
 #define MAX_POLY 16
 
-struct SampleCreatorModule : virtual rack::Module, sst::rackhelpers::module_connector::NeighborConnectable_V1
+struct SampleCreatorModule : virtual rack::Module,
+                             sst::rackhelpers::module_connector::NeighborConnectable_V1
 {
-    static constexpr int maxParams{10};
-
     enum ParamIds
     {
-        PARAM_0,
-        MAX_PARAMS_USED_TO_BE_11_DONT_BREAK_FOLKS = PARAM_0 + maxParams,
-        ATTENUVERTER_0,
-        NUM_PARAMS = ATTENUVERTER_0 + maxParams
+        NUM_PARAMS
     };
 
     enum InputIds
     {
         INPUT_L,
         INPUT_R,
-        CV_0,
-        NUM_INPUTS = CV_0 + maxParams
+
+        INPUT_GO,
+
+        NUM_INPUTS
     };
 
     enum OutputIds
     {
-        OUTPUT_L,
-        OUTPUT_R,
+        OUTPUT_VOCT,
+        OUTPUT_GATE,
+        OUTPUT_VELOCITY,
+
         NUM_OUTPUTS
     };
 
@@ -61,12 +62,36 @@ struct SampleCreatorModule : virtual rack::Module, sst::rackhelpers::module_conn
 
         configInput(INPUT_L, "Left / Mono Input");
         configInput(INPUT_R, "Right Input");
-        configOutput(OUTPUT_L, "Left Output");
-        configOutput(OUTPUT_R, "Right Output");
-        configBypass(INPUT_L, OUTPUT_L);
-        configBypass(INPUT_R, OUTPUT_R);
+        configInput(INPUT_GO, "Start the process");
 
-        configParam(MAX_PARAMS_USED_TO_BE_11_DONT_BREAK_FOLKS, 0, 1, 0, "Unused");
+        configOutput(OUTPUT_VOCT, "VOct Output");
+        configOutput(OUTPUT_GATE, "Gate Output");
+        configOutput(OUTPUT_VELOCITY, "Velocity Output");
+    }
+
+    struct message_t
+    {
+        static constexpr size_t slen{256};
+        char msg[slen]{};
+        message_t() {
+            msg[0] = 0;
+        }
+        message_t(message_t &&other) {
+            strncpy(msg, other.msg, slen);
+        }
+        message_t(message_t &other) {
+            strncpy(msg, other.msg, slen);
+        }
+        message_t operator=(const message_t &other) {
+            strncpy(msg, other.msg, slen);
+            return *this;
+        }
+    };
+    sst::cpputils::SimpleRingBuffer<message_t, 16> messageBuffer;
+    void pushMessage(const char* msg)
+    {
+        // fixme
+        std::cout << msg << std::endl;
     }
 
     std::optional<std::vector<labeledStereoPort_t>> getPrimaryInputs() override
@@ -74,27 +99,92 @@ struct SampleCreatorModule : virtual rack::Module, sst::rackhelpers::module_conn
         return {{std::make_pair("Input", std::make_pair(INPUT_L, INPUT_R))}};
     }
 
-
     json_t *dataToJson() override
     {
         auto res = json_object();
         return res;
     }
 
-    void dataFromJson(json_t *rootJ) override
+    void dataFromJson(json_t *rootJ) override { namespace jh = sst::rackhelpers::json; }
+
+    static constexpr int wavBlockSize{256};
+    float wavBlock[2][wavBlockSize]{};
+    std::size_t wavBlockPosition{0};
+    uint32_t noteNumber{0};
+    uint64_t playbackPos{0};
+
+
+    enum CreateState
     {
-        namespace jh = sst::rackhelpers::json;
+        INACTIVE,
+        NEW_NOTE,
+        GATED_RECORD,
+        RELEASE_RECORD,
+        SPINDOWN_BUFFER,
+    } createState{INACTIVE};
+
+
+    void process(const ProcessArgs &args) override {
+        if (createState == INACTIVE && (inputs[INPUT_GO].getVoltage() > 2))
+        {
+            pushMessage("Starting Up");
+            createState = NEW_NOTE;
+            wavBlockPosition = 0;
+            noteNumber = 60;
+        }
+
+
+        outputs[OUTPUT_VOCT].setVoltage(std::clamp((float)noteNumber / 12.f - 5.f, -5.f, 5.f));
+        outputs[OUTPUT_GATE].setVoltage((createState == GATED_RECORD) * 10.f);
+
+        if (createState == INACTIVE)
+        {
+            return;
+        }
+
+        if (createState == NEW_NOTE)
+        {
+            char ms[256];
+            snprintf(ms, 256, "Starting note %d", noteNumber);
+            pushMessage(ms);
+            playbackPos = 0;
+            createState = GATED_RECORD;
+        }
+
+        if (playbackPos > args.sampleRate && createState == GATED_RECORD)
+        {
+            pushMessage("Releasing");
+            createState = RELEASE_RECORD;
+            playbackPos = 0;
+        }
+
+        if (playbackPos > args.sampleRate && createState == RELEASE_RECORD)
+        {
+            pushMessage("Done");
+            createState = SPINDOWN_BUFFER;
+            playbackPos = 0;
+        }
+
+        if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
+        {
+            pushMessage("Spindown Over");
+            noteNumber ++;
+            if (noteNumber > 72)
+            {
+                createState = INACTIVE;
+                pushMessage("Finished");
+            }
+            else
+            {
+                createState = NEW_NOTE;
+                pushMessage("New Note");
+            }
+        }
+
+
+
+        playbackPos ++;
     }
-
-    static constexpr int maxBlockSize{64};
-    int blockSize{4};
-    std::atomic<int> forceBlockSize{-1};
-
-
-    void process(const ProcessArgs &args) override
-    {
-    }
-
 };
 
 struct SampleCreatorSkin
@@ -119,8 +209,7 @@ struct SampleCreatorSkin
         fontPathMedium = rack::asset::plugin(pluginInstance, "res/PlusJakartaSans-Medium.ttf");
     }
 
-    template<typename T>
-    T dl(const T &dark, const T &light)
+    template <typename T> T dl(const T &dark, const T &light)
     {
         if (skin == DARK)
             return dark;
@@ -156,64 +245,48 @@ struct SampleCreatorSkin
     COL(selectorCategory, nvgRGB(210, 210, 210), nvgRGB(210, 210, 210));
     COL(selectorPoly, nvgRGB(140, 140, 140), nvgRGB(140, 140, 140));
 
-    COL(helpBorder, nvgRGB(180,180,180), nvgRGB(180,180,180));
-    COL(helpBG, nvgRGB(20,20,20), nvgRGB(20,20,20));
-    COL(helpText, nvgRGB(220,220,225), nvgRGB(220,220,225));
+    COL(helpBorder, nvgRGB(180, 180, 180), nvgRGB(180, 180, 180));
+    COL(helpBG, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
+    COL(helpText, nvgRGB(220, 220, 225), nvgRGB(220, 220, 225));
 
-    COL(panelGradientStart, nvgRGB(50,50,60), nvgRGB(225,225,230));
-    COL(panelGradientEnd, nvgRGB(70,70,75), nvgRGB(235,235,245));
+    COL(panelGradientStart, nvgRGB(50, 50, 60), nvgRGB(225, 225, 230));
+    COL(panelGradientEnd, nvgRGB(70, 70, 75), nvgRGB(235, 235, 245));
 
-    COL(panelBottomRegion, nvgRGB(160,160,170), nvgRGB(160,160,170));
-    COL(panelBottomStroke, nvgRGB(0,0,0), nvgRGB(0,0,0));
+    COL(panelBottomRegion, nvgRGB(160, 160, 170), nvgRGB(160, 160, 170));
+    COL(panelBottomStroke, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
 
-    COL(panelInputFill, nvgRGB(190,190,200), nvgRGB(190,190,200));
-    COL(panelInputBorder, nvgRGB(140,140,150), nvgRGB(140,140,150));
-    COL(panelInputText, nvgRGB(40,40,50), nvgRGB(40,40,50));
+    COL(panelInputFill, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
+    COL(panelInputBorder, nvgRGB(140, 140, 150), nvgRGB(140, 140, 150));
+    COL(panelInputText, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
 
-    COL(panelOutputFill,nvgRGB(60,60,70), nvgRGB(60,60,70));
-    COL(panelOutputBorder, nvgRGB(40,40,50), nvgRGB(40,40,50));
-    COL(panelOutputText, nvgRGB(190,190,200), nvgRGB(190,190,200));
+    COL(panelOutputFill, nvgRGB(60, 60, 70), nvgRGB(60, 60, 70));
+    COL(panelOutputBorder, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
+    COL(panelOutputText, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
 
-    COL(panelBrandText, nvgRGB(0,0,0), nvgRGB(0,0,0));
+    COL(panelBrandText, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
 
-    float svgAlpha() { return dl(0.73, 0.23);}
+    float svgAlpha() { return dl(0.73, 0.23); }
 
-    COL(moduleOutline, nvgRGB(100,100,100), nvgRGB(100,100,100));
+    COL(moduleOutline, nvgRGB(100, 100, 100), nvgRGB(100, 100, 100));
 };
 
 SampleCreatorSkin sampleCreatorSkin;
 
-struct AWPort : public sst::rackhelpers::module_connector::PortConnectionMixin<rack::app::SvgPort>
+struct SampleCreatorPort
+    : public sst::rackhelpers::module_connector::PortConnectionMixin<rack::app::SvgPort>
 {
-    AWPort() { setPortActive(true); }
+    SampleCreatorPort() { setPortGraphics(); }
 
-    bool active{true};
-    void setPortActive(bool b)
+    void setPortGraphics()
     {
-        active = b;
         if (sampleCreatorSkin.skin == SampleCreatorSkin::DARK)
         {
-            if (b)
-            {
-                setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on.svg")));
-            }
-            else
-            {
-                setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_off.svg")));
-            }
+            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on.svg")));
         }
         else
         {
-            if (b)
-            {
-                setSvg(
+            setSvg(
                     rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on_light.svg")));
-            }
-            else
-            {
-                setSvg(
-                    rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_off_light.svg")));
-            }
         }
     }
 
@@ -222,7 +295,7 @@ struct AWPort : public sst::rackhelpers::module_connector::PortConnectionMixin<r
     {
         bool dirty{false};
         if (lastSkin != sampleCreatorSkin.skin)
-            setPortActive(active);
+            setPortGraphics();
         lastSkin = sampleCreatorSkin.skin;
 
         rack::Widget::step();
@@ -241,8 +314,8 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
         minAngle = -M_PI * (180 - angleSpreadDegrees) / 180;
         maxAngle = M_PI * (180 - angleSpreadDegrees) / 180;
 
-        bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(rack::Vec(0, 0), box.size,
-                                             [this](auto vg) { drawKnob(vg); });
+        bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), box.size, [this](auto vg) { drawKnob(vg); });
         addChild(bdw);
     }
 
@@ -251,9 +324,8 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
         float radius = px * 0.48;
         nvgBeginPath(vg);
         nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, radius, radius);
-        nvgFillPaint(vg,
-                     nvgRadialGradient(vg, box.size.x * 0.5, box.size.y * 0.5, box.size.x * 0.1,
-                                       box.size.x * 0.4, sampleCreatorSkin.knobCenter(),
+        nvgFillPaint(vg, nvgRadialGradient(vg, box.size.x * 0.5, box.size.y * 0.5, box.size.x * 0.1,
+                                           box.size.x * 0.4, sampleCreatorSkin.knobCenter(),
                                            sampleCreatorSkin.knobEdge()));
         nvgStrokeColor(vg, sampleCreatorSkin.knobStroke());
         nvgStrokeWidth(vg, 0.5);
@@ -341,11 +413,6 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
 {
     typedef SampleCreatorModule M;
 
-    std::array<PixelKnob<20> *, M::maxParams> parKnobs;
-    std::array<rack::ParamWidget *, M::maxParams> attenKnobs;
-    std::array<AWPort *, M::maxParams> cvPorts;
-
-    std::shared_ptr<rack::Svg> clipperSvg;
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bg{nullptr};
 
     SampleCreatorModuleWidget(M *m)
@@ -354,51 +421,53 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         setModule(m);
         box.size = rack::Vec(SCREW_WIDTH * 10, RACK_HEIGHT);
 
-        clipperSvg = rack::Svg::load(rack::asset::plugin(pluginInstance, "res/clipper.svg"));
-
         bg = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(rack::Vec(0, 0), box.size,
-                                            [this](auto vg) { drawBG(vg); });
+                                                                  [this](auto vg) { drawBG(vg); });
         bg->box.pos = rack::Vec(0.0);
         bg->box.size = box.size;
         addChild(bg);
 
         int headerSize{38};
 
+        {
+            auto q = RACK_HEIGHT - 42;
+            auto c1 = box.size.x * 0.25;
+            auto dc = box.size.x * 0.11;
+            auto c2 = box.size.x * 0.75;
+            auto inl = rack::createInputCentered<SampleCreatorPort>(rack::Vec(c1 - dc, q), module,
+                                                                    M::INPUT_L);
+            inl->connectAsInputFromMixmaster = true;
+            inl->mixMasterStereoCompanion = M::INPUT_R;
+            auto inr = rack::createInputCentered<SampleCreatorPort>(rack::Vec(c1 + dc, q), module,
+                                                                    M::INPUT_R);
+            inr->connectAsInputFromMixmaster = true;
+            inr->mixMasterStereoCompanion = M::INPUT_L;
 
-        auto q = RACK_HEIGHT - 42;
-        auto c1 = box.size.x * 0.25;
-        auto dc = box.size.x * 0.11;
-        auto c2 = box.size.x * 0.75;
-        auto inl = rack::createInputCentered<AWPort>(rack::Vec(c1 - dc, q), module, M::INPUT_L);
-        inl->connectAsInputFromMixmaster = true;
-        inl->mixMasterStereoCompanion = M::INPUT_R;
-        auto inr = rack::createInputCentered<AWPort>(rack::Vec(c1 + dc, q), module, M::INPUT_R);
-        inr->connectAsInputFromMixmaster = true;
-        inr->mixMasterStereoCompanion = M::INPUT_L;
+            addInput(inl);
+            addInput(inr);
+        }
 
-        auto outl = rack::createOutputCentered<AWPort>(rack::Vec(c2 - dc, q), module, M::OUTPUT_L);
-        outl->connectAsOutputToMixmaster = true;
-        outl->mixMasterStereoCompanion = M::OUTPUT_R;
-        outl->connectOutputToNeighbor = true;
+        {
+            auto y = 50;
+            auto x = 40;
+            auto in = rack::createInputCentered<SampleCreatorPort>(rack::Vec(x,y), module, M::INPUT_GO);
+            addInput(in);
 
-        auto outr = rack::createOutputCentered<AWPort>(rack::Vec(c2 + dc, q), module, M::OUTPUT_R);
-        outr->connectAsOutputToMixmaster = true;
-        outr->mixMasterStereoCompanion = M::OUTPUT_L;
-        outr->connectOutputToNeighbor = true;
+            y += 40;
+            for (auto o : {M::OUTPUT_VOCT, M::OUTPUT_VELOCITY, M::OUTPUT_GATE})
+            {
+                auto ot = rack::createOutputCentered<SampleCreatorPort>(rack::Vec(x,y), module, o);
+                addOutput(ot);
+                y += 40;
+            }
+        }
 
-        addInput(inl);
-        addInput(inr);
-        addOutput(outl);
-        addOutput(outr);
+
     }
 
-    ~SampleCreatorModuleWidget()
-    {
-    }
+    ~SampleCreatorModuleWidget() {}
 
-    void appendContextMenu(rack::Menu *menu) override
-    {
-    }
+    void appendContextMenu(rack::Menu *menu) override {}
 
     void drawBG(NVGcontext *vg)
     {
@@ -442,9 +511,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         nvgFontSize(vg, 10);
         nvgText(vg, box.size.x * 0.25, box.size.y - cutPoint + 38, "IN", nullptr);
 
-         nvgFontSize(vg, 10);
-         nvgText(vg, box.size.x * 0.25 - dc, box.size.y - cutPoint + 38, "L", nullptr);
-         nvgText(vg, box.size.x * 0.25 + dc, box.size.y - cutPoint + 38, "R", nullptr);
+        nvgFontSize(vg, 10);
+        nvgText(vg, box.size.x * 0.25 - dc, box.size.y - cutPoint + 38, "L", nullptr);
+        nvgText(vg, box.size.x * 0.25 + dc, box.size.y - cutPoint + 38, "R", nullptr);
 
         // Output region
         nvgBeginPath(vg);
@@ -461,18 +530,18 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         nvgTextAlign(vg, NVG_ALIGN_BOTTOM | NVG_ALIGN_CENTER);
         nvgFontFaceId(vg, fid);
 
-            nvgFontSize(vg, 10);
-            nvgText(vg, box.size.x * 0.75, box.size.y - cutPoint + 38, "OUT", nullptr);
-            nvgFontSize(vg, 10);
-            nvgText(vg, box.size.x * 0.75 - dc, box.size.y - cutPoint + 38, "L", nullptr);
-            nvgText(vg, box.size.x * 0.75 + dc, box.size.y - cutPoint + 38, "R", nullptr);
-        // Brand
+        nvgFontSize(vg, 10);
+        nvgText(vg, box.size.x * 0.75, box.size.y - cutPoint + 38, "OUT", nullptr);
+        nvgFontSize(vg, 10);
+        nvgText(vg, box.size.x * 0.75 - dc, box.size.y - cutPoint + 38, "L", nullptr);
+        nvgText(vg, box.size.x * 0.75 + dc, box.size.y - cutPoint + 38, "R", nullptr);
+
         nvgBeginPath(vg);
         nvgFillColor(vg, sampleCreatorSkin.panelBrandText());
         nvgTextAlign(vg, NVG_ALIGN_BOTTOM | NVG_ALIGN_CENTER);
         nvgFontFaceId(vg, fid);
         nvgFontSize(vg, 14);
-        nvgText(vg, box.size.x * 0.5, box.size.y - 2, "Airwindows", nullptr);
+        nvgText(vg, box.size.x * 0.5, box.size.y - 2, "SampleCreator", nullptr);
 
         // Outline the module
         nvgBeginPath(vg);
@@ -492,13 +561,14 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         auto shouldBeDark = rack::settings::preferDarkPanels;
         if (isDark != shouldBeDark)
         {
-            sampleCreatorSkin.skin = (shouldBeDark ? SampleCreatorSkin::DARK : SampleCreatorSkin::LIGHT);
+            sampleCreatorSkin.skin =
+                (shouldBeDark ? SampleCreatorSkin::DARK : SampleCreatorSkin::LIGHT);
             bg->dirty = true;
         }
 
         rack::ModuleWidget::step();
     }
-
 };
 
-rack::Model *sampleCreatorModel = rack::createModel<SampleCreatorModule, SampleCreatorModuleWidget>("SampleCreator");
+rack::Model *sampleCreatorModel =
+    rack::createModel<SampleCreatorModule, SampleCreatorModuleWidget>("SampleCreator");
