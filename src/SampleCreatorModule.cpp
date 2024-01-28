@@ -1,9 +1,11 @@
 /*
- * Airwin2Rack - an adaptation of the airwindows effect suite for VCVRack
+ * SampleCreator
  *
- * This source released under the MIT License, found in ~/LICENSE.md.
+ * An experimental idea based on a preliminary convo. Probably best to come back later.
  *
- * Copyright 2023 by the authors as described in the github transaction log
+ * Copyright Paul Walker 2024
+ *
+ * Released under the MIT License. See `LICENSE.md` for details
  */
 
 #include "SampleCreator.hpp"
@@ -16,6 +18,11 @@
 #include <cstdint>
 #include <cstdio>
 
+#include <ghc/filesystem.hpp>
+namespace fs = ghc::filesystem;
+
+#include <tinywav.h>
+
 #include "sst/cpputils/ring_buffer.h"
 
 #include "sst/rackhelpers/json.h"
@@ -23,14 +30,13 @@
 #include "sst/rackhelpers/neighbor_connectable.h"
 #include "sst/rackhelpers/module_connector.h"
 
-#include <ghc/filesystem.hpp>
-namespace fs = ghc::filesystem;
-
-#include <tinywav.h>
-
+#include "SampleCreatorSkin.hpp"
+#include "CustomWidgets.hpp"
 
 #define MAX_POLY 16
 
+namespace baconpaul::samplecreator
+{
 struct SampleCreatorModule : virtual rack::Module,
                              sst::rackhelpers::module_connector::NeighborConnectable_V1
 {
@@ -80,22 +86,17 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         static constexpr size_t slen{256};
         char msg[slen]{};
-        message_t() {
-            msg[0] = 0;
-        }
-        message_t(message_t &&other) {
-            strncpy(msg, other.msg, slen);
-        }
-        message_t(message_t &other) {
-            strncpy(msg, other.msg, slen);
-        }
-        message_t operator=(const message_t &other) {
+        message_t() { msg[0] = 0; }
+        message_t(message_t &&other) { strncpy(msg, other.msg, slen); }
+        message_t(message_t &other) { strncpy(msg, other.msg, slen); }
+        message_t operator=(const message_t &other)
+        {
             strncpy(msg, other.msg, slen);
             return *this;
         }
     };
     sst::cpputils::SimpleRingBuffer<message_t, 16> messageBuffer;
-    void pushMessage(const char* msg)
+    void pushMessage(const char *msg)
     {
         // fixme
         std::cout << msg << std::endl;
@@ -120,7 +121,6 @@ struct SampleCreatorModule : virtual rack::Module,
     uint32_t noteNumber{0};
     uint64_t playbackPos{0};
 
-
     enum CreateState
     {
         INACTIVE,
@@ -130,11 +130,11 @@ struct SampleCreatorModule : virtual rack::Module,
         SPINDOWN_BUFFER,
     } createState{INACTIVE};
 
-
     fs::path currentSampleDir{};
     TinyWav tinyWavControl;
 
-    void process(const ProcessArgs &args) override {
+    void process(const ProcessArgs &args) override
+    {
         if (createState == INACTIVE && (inputs[INPUT_GO].getVoltage() > 2))
         {
             pushMessage("Starting Up");
@@ -145,7 +145,6 @@ struct SampleCreatorModule : virtual rack::Module,
             currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator";
             fs::create_directories(currentSampleDir);
         }
-
 
         outputs[OUTPUT_VOCT].setVoltage(std::clamp((float)noteNumber / 12.f - 5.f, -5.f, 5.f));
         outputs[OUTPUT_GATE].setVoltage((createState == GATED_RECORD) * 10.f);
@@ -164,11 +163,8 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = GATED_RECORD;
 
             auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
-            auto res = tinywav_open_write(&tinyWavControl,
-                                          2, args.sampleRate,
-                                          TW_FLOAT32, TW_INTERLEAVED,
-                                          fn.u8string().c_str());
-
+            auto res = tinywav_open_write(&tinyWavControl, 2, args.sampleRate, TW_FLOAT32,
+                                          TW_INTERLEAVED, fn.u8string().c_str());
         }
 
         if (playbackPos > args.sampleRate && createState == GATED_RECORD)
@@ -199,7 +195,7 @@ struct SampleCreatorModule : virtual rack::Module,
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
         {
             pushMessage("Spindown Over");
-            noteNumber ++;
+            noteNumber++;
             if (noteNumber > 72)
             {
                 createState = INACTIVE;
@@ -212,94 +208,9 @@ struct SampleCreatorModule : virtual rack::Module,
             }
         }
 
-        playbackPos ++;
+        playbackPos++;
     }
 };
-
-struct SampleCreatorSkin
-{
-    enum Skin
-    {
-        LIGHT,
-        DARK
-    } skin{DARK};
-
-    std::string fontPath, fontPathMedium;
-    bool initialized{false};
-    SampleCreatorSkin() {}
-
-    void intialize()
-    {
-        if (initialized)
-            return;
-        initialized = true;
-
-        fontPath = rack::asset::plugin(pluginInstance, "res/PlusJakartaSans-SemiBold.ttf");
-        fontPathMedium = rack::asset::plugin(pluginInstance, "res/PlusJakartaSans-Medium.ttf");
-    }
-
-    template <typename T> T dl(const T &dark, const T &light)
-    {
-        if (skin == DARK)
-            return dark;
-        else
-            return light;
-    }
-
-#define COL(n, d, l)                                                                               \
-    NVGcolor n() { return dl(d, l); }
-
-    COL(knobCenter, nvgRGB(110, 110, 120), nvgRGB(185, 185, 220));
-    COL(knobEdge, nvgRGB(110, 110, 130), nvgRGB(190, 190, 225));
-    COL(knobStroke, nvgRGB(20, 20, 20), nvgRGB(50, 50, 60));
-    COL(knobValueFill, nvgRGB(240, 240, 240), nvgRGB(20, 20, 20));
-    COL(knobValueStroke, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
-
-    COL(labeLText, nvgRGB(220, 220, 220), nvgRGB(20, 20, 20));
-    COL(labelRule, nvgRGB(110, 110, 120), nvgRGB(150, 150, 160));
-
-    COL(deactivatedJogStroke, nvgRGB(60, 60, 60), nvgRGB(60, 60, 60));
-    COL(deactivatedJogFill, nvgRGB(40, 40, 40), nvgRGB(40, 40, 40));
-    COL(jogFill, nvgRGB(190, 190, 190), nvgRGB(190, 190, 190));
-    COL(jogFillHover, nvgRGB(240, 240, 100), nvgRGB(240, 240, 100));
-    COL(jogStroke, nvgRGB(220, 220, 220), nvgRGB(220, 220, 220));
-
-    COL(helpOpen, nvgRGB(220, 220, 220), nvgRGB(220, 220, 220));
-    COL(helpClose, nvgRGB(120, 120, 120), nvgRGB(120, 120, 120));
-
-    COL(selectorFill, nvgRGB(20, 20, 30), nvgRGB(20, 20, 30));
-    COL(selectorOutline, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
-    COL(selectorOutlineHighlight, nvgRGB(140, 140, 160), nvgRGB(140, 140, 160));
-    COL(selectorEffect, nvgRGB(240, 240, 240), nvgRGB(240, 240, 240));
-    COL(selectorCategory, nvgRGB(210, 210, 210), nvgRGB(210, 210, 210));
-    COL(selectorPoly, nvgRGB(140, 140, 140), nvgRGB(140, 140, 140));
-
-    COL(helpBorder, nvgRGB(180, 180, 180), nvgRGB(180, 180, 180));
-    COL(helpBG, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
-    COL(helpText, nvgRGB(220, 220, 225), nvgRGB(220, 220, 225));
-
-    COL(panelGradientStart, nvgRGB(50, 50, 60), nvgRGB(225, 225, 230));
-    COL(panelGradientEnd, nvgRGB(70, 70, 75), nvgRGB(235, 235, 245));
-
-    COL(panelBottomRegion, nvgRGB(160, 160, 170), nvgRGB(160, 160, 170));
-    COL(panelBottomStroke, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
-
-    COL(panelInputFill, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
-    COL(panelInputBorder, nvgRGB(140, 140, 150), nvgRGB(140, 140, 150));
-    COL(panelInputText, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
-
-    COL(panelOutputFill, nvgRGB(60, 60, 70), nvgRGB(60, 60, 70));
-    COL(panelOutputBorder, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
-    COL(panelOutputText, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
-
-    COL(panelBrandText, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
-
-    float svgAlpha() { return dl(0.73, 0.23); }
-
-    COL(moduleOutline, nvgRGB(100, 100, 100), nvgRGB(100, 100, 100));
-};
-
-SampleCreatorSkin sampleCreatorSkin;
 
 struct SampleCreatorPort
     : public sst::rackhelpers::module_connector::PortConnectionMixin<rack::app::SvgPort>
@@ -314,8 +225,7 @@ struct SampleCreatorPort
         }
         else
         {
-            setSvg(
-                    rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on_light.svg")));
+            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on_light.svg")));
         }
     }
 
@@ -438,7 +348,7 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
     }
 };
 
-struct SampleCreatorModuleWidget : rack::ModuleWidget
+struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 {
     typedef SampleCreatorModule M;
 
@@ -479,19 +389,18 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         {
             auto y = 50;
             auto x = 40;
-            auto in = rack::createInputCentered<SampleCreatorPort>(rack::Vec(x,y), module, M::INPUT_GO);
+            auto in =
+                rack::createInputCentered<SampleCreatorPort>(rack::Vec(x, y), module, M::INPUT_GO);
             addInput(in);
 
             y += 40;
             for (auto o : {M::OUTPUT_VOCT, M::OUTPUT_VELOCITY, M::OUTPUT_GATE})
             {
-                auto ot = rack::createOutputCentered<SampleCreatorPort>(rack::Vec(x,y), module, o);
+                auto ot = rack::createOutputCentered<SampleCreatorPort>(rack::Vec(x, y), module, o);
                 addOutput(ot);
                 y += 40;
             }
         }
-
-
     }
 
     ~SampleCreatorModuleWidget() {}
@@ -580,24 +489,20 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget
         nvgStroke(vg);
     }
 
+    void onSkinChanged() override { bg->dirty = true; }
+
     void step() override
     {
         if (module)
         {
         }
 
-        auto isDark = (sampleCreatorSkin.skin == SampleCreatorSkin::DARK);
-        auto shouldBeDark = rack::settings::preferDarkPanels;
-        if (isDark != shouldBeDark)
-        {
-            sampleCreatorSkin.skin =
-                (shouldBeDark ? SampleCreatorSkin::DARK : SampleCreatorSkin::LIGHT);
-            bg->dirty = true;
-        }
-
+        sampleCreatorSkin.step();
         rack::ModuleWidget::step();
     }
 };
+} // namespace baconpaul::samplecreator
 
 rack::Model *sampleCreatorModel =
-    rack::createModel<SampleCreatorModule, SampleCreatorModuleWidget>("SampleCreator");
+    rack::createModel<baconpaul::samplecreator::SampleCreatorModule,
+                      baconpaul::samplecreator::SampleCreatorModuleWidget>("SampleCreator");

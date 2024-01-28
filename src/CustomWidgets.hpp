@@ -8,14 +8,14 @@
  * Released under the MIT License. See `LICENSE.md` for details
  */
 
-#ifndef SRC_SAMPLECREATOR_HPP
-#define SRC_SAMPLECREATOR_HPP
+#ifndef SRC_CUSTOMWIDGETS_HPP
+#define SRC_CUSTOMWIDGETS_HPP
 
 #include "rack.hpp"
 
-#define SCREW_WIDTH 15
-#define RACK_HEIGHT 380
+namespace baconpaul::samplecreator
+{
 
-extern rack::Plugin *pluginInstance;
-extern rack::Model *sampleCreatorModel;
-#endif
+}
+
+#endif // SAMPLECREATOR_CUSTOMWIDGETS_H
