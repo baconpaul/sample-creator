@@ -60,8 +60,8 @@ struct SampleCreatorSkin
             return;
         initialized = true;
 
-        fontPath = rack::asset::plugin(pluginInstance, "res/PlusJakartaSans-SemiBold.ttf");
-        fontPathMedium = rack::asset::plugin(pluginInstance, "res/PlusJakartaSans-Medium.ttf");
+        fontPath = rack::asset::plugin(pluginInstance, "res/FiraCode-Regular.ttf");
+        fontPathMedium = rack::asset::plugin(pluginInstance, "res/FiraCode-Medium.ttf");
     }
 
     template <typename T> T dl(const T &dark, const T &light)
@@ -75,6 +75,7 @@ struct SampleCreatorSkin
 #define COL(n, d, l)                                                                               \
     NVGcolor n() { return dl(d, l); }
 
+    /*
     COL(knobCenter, nvgRGB(110, 110, 120), nvgRGB(185, 185, 220));
     COL(knobEdge, nvgRGB(110, 110, 130), nvgRGB(190, 190, 225));
     COL(knobStroke, nvgRGB(20, 20, 20), nvgRGB(50, 50, 60));
@@ -104,10 +105,16 @@ struct SampleCreatorSkin
     COL(helpBG, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
     COL(helpText, nvgRGB(220, 220, 225), nvgRGB(220, 220, 225));
 
-    COL(panelGradientStart, nvgRGB(50, 50, 60), nvgRGB(225, 225, 230));
-    COL(panelGradientEnd, nvgRGB(70, 70, 75), nvgRGB(235, 235, 245));
+    float svgAlpha() { return dl(0.73, 0.23); }
 
-    COL(panelBottomRegion, nvgRGB(160, 160, 170), nvgRGB(160, 160, 170));
+     */
+
+    COL(moduleOutline, nvgRGB(100, 100, 100), nvgRGB(100, 100, 100));
+
+    COL(panelGradientStart, nvgRGB(20, 20, 25), nvgRGB(225, 225, 230));
+    COL(panelGradientEnd, nvgRGB(20, 29, 35), nvgRGB(235, 235, 245));
+
+    COL(panelBottomRegion, nvgRGB(40, 40, 45), nvgRGB(160, 160, 170));
     COL(panelBottomStroke, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
 
     COL(panelInputFill, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
@@ -115,14 +122,11 @@ struct SampleCreatorSkin
     COL(panelInputText, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
 
     COL(panelOutputFill, nvgRGB(60, 60, 70), nvgRGB(60, 60, 70));
-    COL(panelOutputBorder, nvgRGB(40, 40, 50), nvgRGB(40, 40, 50));
+    COL(panelOutputBorder, nvgRGB(90, 90, 100), nvgRGB(40, 40, 50));
     COL(panelOutputText, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
 
-    COL(panelBrandText, nvgRGB(0, 0, 0), nvgRGB(0, 0, 0));
+    COL(panelBrandText, nvgRGB(200, 200, 220), nvgRGB(0, 0, 0));
 
-    float svgAlpha() { return dl(0.73, 0.23); }
-
-    COL(moduleOutline, nvgRGB(100, 100, 100), nvgRGB(100, 100, 100));
 };
 
 extern SampleCreatorSkin sampleCreatorSkin;
