@@ -2,7 +2,6 @@ Nothing to see here.
 
 Steps to MVP
 
-- Pick a directory ui
 - Pick a format ui but do nothing now
 - velocity ranges
 - round robin output on panel

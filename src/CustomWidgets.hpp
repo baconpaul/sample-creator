@@ -19,6 +19,14 @@
 namespace baconpaul::samplecreator
 {
 
+inline NVGcolor lighten(NVGcolor a, float f)
+{
+    a.r = std::clamp(a.r * f, 0.f, 255.f);
+    a.g = std::clamp(a.g * f, 0.f, 255.f);
+    a.b = std::clamp(a.b * f, 0.f, 255.f);
+    return a;
+};
+
 struct PQObserver
 {
     float val{-10242132.f};
@@ -211,6 +219,79 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
     void onSkinChanged() override { bdw->dirty = true; }
 };
 
+struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+
+    std::string label;
+    std::function<void()> onClick{nullptr};
+    bool hover{false};
+
+    static SCPanelPushButton *create(const rack::Vec &pos, const rack::Vec &size,
+                                     const std::string &label, std::function<void()> onClick)
+    {
+        auto res = new SCPanelPushButton();
+        res->box.pos = pos;
+        res->box.size = size;
+        res->label = label;
+        res->onClick = onClick;
+
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawButton(a); });
+        res->addChild(res->bdw);
+        return res;
+    }
+
+    void drawButton(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillPaint(
+            vg, nvgLinearGradient(vg, 0, 0, 0, box.size.y,
+                                  lighten(sampleCreatorSkin.pushButtonFill(), 1.4),
+                                  lighten(sampleCreatorSkin.pushButtonFill(), hover ? 1.2 : 1.0)));
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, hover ? sampleCreatorSkin.pushButtonHoverText()
+                               : sampleCreatorSkin.pushButtonText());
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 12);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+        nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+    }
+
+    void onButton(const ButtonEvent &e) override
+    {
+        if (e.action == GLFW_PRESS)
+        {
+            if (onClick)
+            {
+                onClick();
+                e.consume(this);
+            }
+        }
+    }
+    void onHover(const HoverEvent &e) override { e.consume(this); }
+    void onEnter(const EnterEvent &e) override
+    {
+        hover = true;
+        bdw->dirty = true;
+    }
+    void onLeave(const LeaveEvent &e) override
+    {
+        hover = false;
+        bdw->dirty = true;
+    }
+    void onSkinChanged() override { bdw->dirty = true; }
+};
+
 template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
@@ -234,15 +315,9 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         nvgBeginPath(vg);
         nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, radius, radius);
 
-        auto lighter = [](auto a, auto f) {
-            a.r = std::clamp(a.r * f, 0., 255.);
-            a.g = std::clamp(a.g * f, 0., 255.);
-            a.b = std::clamp(a.b * f, 0., 255.);
-            return a;
-        };
         nvgFillPaint(vg, nvgLinearGradient(vg, 0, 0, 0, box.size.y,
-                                           lighter(sampleCreatorSkin.knobGradientTop(), 1.3),
-                                           lighter(sampleCreatorSkin.knobGradientBottom(), 1.1)));
+                                           lighten(sampleCreatorSkin.knobGradientTop(), 1.3),
+                                           lighten(sampleCreatorSkin.knobGradientBottom(), 1.1)));
         nvgStrokeColor(vg, sampleCreatorSkin.knobStroke());
         nvgStrokeWidth(vg, 0.5);
         nvgFill(vg);

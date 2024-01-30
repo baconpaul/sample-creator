@@ -22,6 +22,7 @@
 namespace fs = ghc::filesystem;
 
 #include <tinywav.h>
+#include <osdialog.h>
 
 #include "sst/cpputils/ring_buffer.h"
 
@@ -173,7 +174,8 @@ struct SampleCreatorModule : virtual rack::Module,
             wavBlockPosition = 0;
             noteNumber = 60;
 
-            currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator";
+            if (currentSampleDir.empty())
+                currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
             fs::create_directories(currentSampleDir);
         }
 
@@ -278,8 +280,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
         {
             auto sOm = new rack::widget::SvgWidget;
-            auto Omsvg = APP->window->loadSvg(
-                rack::asset::plugin(pluginInstance, "res/BaconLogo.svg"));
+            auto Omsvg =
+                APP->window->loadSvg(rack::asset::plugin(pluginInstance, "res/BaconLogo.svg"));
             sOm->setSvg(Omsvg);
             sOm->box.pos = rack::Vec(0, 0);
             sOm->wrap();
@@ -368,9 +370,37 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 y += 28;
             }
         }
+        {
+            auto x = 10 + 95 + 50 + 5;
+            auto y = 60;
+            auto path = SCPanelPushButton::create(rack::Vec(x, y - 9), rack::Vec(60, 18),
+                                                  "Set Path", [this]() { selectPath(); });
+            addChild(path);
+        }
     }
 
     ~SampleCreatorModuleWidget() {}
+
+    void selectPath()
+    {
+        auto scm = dynamic_cast<SampleCreatorModule *>(module);
+        if (!scm)
+            return;
+
+        auto pt = scm->currentSampleDir;
+        if (pt.empty())
+        {
+            pt = fs::path{rack::asset::userDir} / "SampleCreator";
+        }
+
+        char *path = osdialog_file(OSDIALOG_OPEN_DIR, pt.u8string().c_str(), "", NULL);
+        if (path)
+        {
+            scm->currentSampleDir = fs::path{path};
+            std::cout << scm->currentSampleDir.u8string() << std::endl;
+            free(path);
+        }
+    }
 
     void appendContextMenu(rack::Menu *menu) override {}
 
