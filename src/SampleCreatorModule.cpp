@@ -262,8 +262,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         int headerSize{38};
 
         // Input Elements
+
+        auto priorBSx = 10 * SCREW_WIDTH;
         {
-            auto priorBSx = 10 * SCREW_WIDTH;
             auto q = RACK_HEIGHT - 42;
             auto c1 = priorBSx * 0.25;
             auto dc = priorBSx * 0.11;
@@ -272,28 +273,47 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                                                                     M::INPUT_L);
             inl->connectAsInputFromMixmaster = true;
             inl->mixMasterStereoCompanion = M::INPUT_R;
+
+            auto lab = InPortLabel ::createCentered(rack::Vec(c1 - dc, q + 17), 20, "L");
+            addChild(lab);
+
             auto inr = rack::createInputCentered<SampleCreatorPort>(rack::Vec(c1 + dc, q), module,
                                                                     M::INPUT_R);
             inr->connectAsInputFromMixmaster = true;
             inr->mixMasterStereoCompanion = M::INPUT_L;
+
+            lab = InPortLabel::createCentered(rack::Vec(c1 + dc, q + 17), 20, "R");
+            addChild(lab);
+
+            lab = InPortLabel::createCentered(rack::Vec(c1, q + 17), 10, "IN");
+            addChild(lab);
 
             addInput(inl);
             addInput(inr);
         }
 
         {
+            auto q = RACK_HEIGHT - 42;
+            auto c1 = priorBSx * 0.14 + priorBSx * 0.5;
+
             auto y = 50;
             auto x = 40;
             auto in =
                 rack::createInputCentered<SampleCreatorPort>(rack::Vec(x, y), module, M::INPUT_GO);
             addInput(in);
 
-            y += 40;
-            for (auto o : {M::OUTPUT_VOCT, M::OUTPUT_VELOCITY, M::OUTPUT_GATE})
+            for (auto [o, l] : {std::make_pair(M::OUTPUT_VOCT, "V/OCT"),
+                                {M::OUTPUT_VELOCITY, "VEL"},
+                                {M::OUTPUT_GATE, "GATE"}})
             {
-                auto ot = rack::createOutputCentered<SampleCreatorPort>(rack::Vec(x, y), module, o);
+                auto ot =
+                    rack::createOutputCentered<SampleCreatorPort>(rack::Vec(c1, q), module, o);
                 addOutput(ot);
-                y += 40;
+
+                auto lab = OutPortLabel::createCentered(rack::Vec(c1, q + 17), priorBSx * 0.25, l);
+                addChild(lab);
+
+                c1 += priorBSx * 0.25;
             }
         }
     }
@@ -332,22 +352,11 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         nvgStrokeColor(vg, sampleCreatorSkin.panelInputBorder());
         nvgFillColor(vg, sampleCreatorSkin.panelInputFill());
         nvgStrokeWidth(vg, 1);
-        nvgRoundedRect(vg, 4, box.size.y - cutPoint + 3, priorBSx * 0.5 - 8, 37, 2);
+        nvgRoundedRect(vg, 4, box.size.y - cutPoint + 2, priorBSx * 0.5 - 8, 38, 2);
         nvgFill(vg);
         nvgStroke(vg);
 
         auto dc = priorBSx * 0.11;
-
-        nvgBeginPath(vg);
-        nvgFillColor(vg, sampleCreatorSkin.panelInputText());
-        nvgTextAlign(vg, NVG_ALIGN_BOTTOM | NVG_ALIGN_CENTER);
-        nvgFontFaceId(vg, fid);
-        nvgFontSize(vg, 10);
-        nvgText(vg, priorBSx * 0.25, box.size.y - cutPoint + 38, "IN", nullptr);
-
-        nvgFontSize(vg, 10);
-        nvgText(vg, priorBSx * 0.25 - dc, box.size.y - cutPoint + 38, "L", nullptr);
-        nvgText(vg, priorBSx * 0.25 + dc, box.size.y - cutPoint + 38, "R", nullptr);
 
         // Output Region
         nvgBeginPath(vg);
@@ -356,7 +365,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         nvgStrokeWidth(vg, 1);
         auto outw = box.size.x - priorBSx * 0.5 - 4;
 
-        nvgRoundedRect(vg, priorBSx * 0.5, box.size.y - cutPoint + 3, outw, 37, 2);
+        nvgRoundedRect(vg, priorBSx * 0.5, box.size.y - cutPoint + 2, outw, 38, 2);
         nvgFill(vg);
         nvgStroke(vg);
 

@@ -13,9 +13,61 @@
 
 #include "rack.hpp"
 
+#include "SampleCreatorSkin.hpp"
+
 namespace baconpaul::samplecreator
 {
 
+template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt> struct SCLabel : rack::Widget
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    std::string label;
+
+    static SCLabel *createCentered(const rack::Vec &ctr, int w, const std::string &label)
+    {
+        auto r = new SCLabel();
+        r->box.pos = ctr;
+        r->box.pos.x -= w / 2;
+        r->box.pos.y -= pt / 2;
+
+        r->box.size = rack::Vec(w, pt);
+
+        r->label = label;
+
+        r->initBDW();
+
+        return r;
+    }
+
+    void initBDW()
+    {
+        bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), box.size, [this](auto *a) { drawLabel(a); });
+        bdw->dirty = true;
+        addChild(bdw);
+    }
+
+    void drawLabel(NVGcontext *vg)
+    {
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        /*nvgBeginPath(vg);
+        nvgStrokeColor(vg, nvgRGB(0,255,0));
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgStroke(vg);
+         */
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, (&sampleCreatorSkin->*txtcol)());
+        nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, pt);
+        nvgText(vg, box.size.x * 0.5, box.size.y * 0.5, label.c_str(), nullptr);
+    }
+};
+
+using InPortLabel = SCLabel<&SampleCreatorSkin::panelInputText, 11>;
+using OutPortLabel = SCLabel<&SampleCreatorSkin::panelOutputText, 11>;
 
 template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
 {
@@ -126,6 +178,6 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
     }
 };
 
-}
+} // namespace baconpaul::samplecreator
 
 #endif // SAMPLECREATOR_CUSTOMWIDGETS_H
