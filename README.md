@@ -3,7 +3,6 @@ Nothing to see here.
 Steps to MVP
 
 Code in Engine:
-    - keyboard ranges
     - velocity ranges coded
     - Round robins coded
 

@@ -220,7 +220,7 @@ struct SampleCreatorModule : virtual rack::Module,
             startOperating = false;
             createState = NEW_NOTE;
             wavBlockPosition = 0;
-            noteNumber = 60;
+            noteNumber = (int)std::round(getParam(MIDI_START_RANGE).getValue());
 
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
@@ -330,7 +330,8 @@ struct SampleCreatorModule : virtual rack::Module,
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
         {
             noteNumber++;
-            if (noteNumber > 72)
+            auto endNumber = (int)std::round(getParam(MIDI_END_RANGE).getValue());
+            if (noteNumber > endNumber)
             {
                 createState = INACTIVE;
                 pushMessage("Render Complete");
