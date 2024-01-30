@@ -2,9 +2,6 @@ Nothing to see here.
 
 Steps to MVP
 
-UI
-    - log messages onto display
-
 Code in Engine:
     - gate time
     - release detection

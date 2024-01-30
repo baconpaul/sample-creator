@@ -17,6 +17,7 @@
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
+#include <deque>
 
 #include <ghc/filesystem.hpp>
 namespace fs = ghc::filesystem;
@@ -134,6 +135,8 @@ struct SampleCreatorModule : virtual rack::Module,
         }
 
         configParam(GATE_TIME, 0.2, 16, 1, "Gate Time", "s");
+
+        pushMessage("Sample Creator Started");
     }
 
     struct message_t
@@ -149,11 +152,22 @@ struct SampleCreatorModule : virtual rack::Module,
             return *this;
         }
     };
-    sst::cpputils::SimpleRingBuffer<message_t, 16> messageBuffer;
-    void pushMessage(const char *msg)
+
+    // tis is not entirely thread safe and strings can allocate but
+    // it is infrequenty used. Good enough for now.
+    std::array<std::string, 1024> messageBuffer;
+    std::atomic<int32_t> mbWrite{0}, mbRead{0};
+    void pushMessage(const std::string &s)
     {
-        // fixme
-        std::cout << msg << std::endl;
+        messageBuffer[mbWrite] = s;
+        mbWrite = (mbWrite + 1) & 1023;
+    }
+    bool hasMessage() { return mbRead != mbWrite; }
+    std::string popMessage()
+    {
+        auto res = messageBuffer[mbRead];
+        mbRead = (mbRead + 1) & 1023;
+        return res;
     }
 
     std::optional<std::vector<labeledStereoPort_t>> getPrimaryInputs() override
@@ -172,7 +186,7 @@ struct SampleCreatorModule : virtual rack::Module,
     static constexpr int wavBlockSize{256};
     float wavBlock[2][wavBlockSize]{};
     std::size_t wavBlockPosition{0};
-    uint32_t noteNumber{0};
+    uint32_t noteNumber{60};
     uint64_t playbackPos{0};
 
     enum CreateState
@@ -195,7 +209,8 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         if (createState == INACTIVE && startOperating)
         {
-            pushMessage("Starting Up");
+            pushMessage(std::string("Starting render in ") +
+                        (testMode ? "Test Mode" : "Record Mode"));
             startOperating = false;
             createState = NEW_NOTE;
             wavBlockPosition = 0;
@@ -203,7 +218,11 @@ struct SampleCreatorModule : virtual rack::Module,
 
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
-            fs::create_directories(currentSampleDir);
+            if (!testMode)
+            {
+                fs::create_directories(currentSampleDir);
+                pushMessage("Writing to '" + currentSampleDir.u8string() + "'");
+            }
         }
 
         outputs[OUTPUT_VOCT].setVoltage(std::clamp((float)noteNumber / 12.f - 5.f, -5.f, 5.f));
@@ -217,25 +236,26 @@ struct SampleCreatorModule : virtual rack::Module,
         if (createState == NEW_NOTE)
         {
             char ms[256];
-            snprintf(ms, 256, "Starting note %d", noteNumber);
-            pushMessage(ms);
+            pushMessage(std::string("Starting note ") + std::to_string(noteNumber));
             playbackPos = 0;
             createState = GATED_RECORD;
 
             auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
             if (!testMode)
             {
+                pushMessage("Writing file '" + fn.filename().u8string() + "'");
                 auto res = tinywav_open_write(&tinyWavControl, 2, args.sampleRate, TW_FLOAT32,
                                               TW_INTERLEAVED, fn.u8string().c_str());
                 if (res)
                 {
-                    // FIXME
+                    pushMessage("File failed to open");
                 }
             }
         }
 
         if (stopImmediately)
         {
+            pushMessage("Stopping operation");
             if (!testMode && (createState == GATED_RECORD || createState == RELEASE_RECORD))
             {
                 tinywav_close_write(&tinyWavControl);
@@ -246,18 +266,18 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (playbackPos > args.sampleRate && createState == GATED_RECORD)
         {
-            pushMessage("Releasing");
             createState = RELEASE_RECORD;
             playbackPos = 0;
         }
 
         if (playbackPos > args.sampleRate && createState == RELEASE_RECORD)
         {
-            pushMessage("Done");
+            pushMessage("Note Render complete.");
             createState = SPINDOWN_BUFFER;
             playbackPos = 0;
             if (!testMode)
             {
+                pushMessage("Closing File");
                 tinywav_close_write(&tinyWavControl);
             }
         }
@@ -277,21 +297,87 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
         {
-            pushMessage("Spindown Over");
             noteNumber++;
             if (noteNumber > 72)
             {
                 createState = INACTIVE;
-                pushMessage("Finished");
+                pushMessage("Render Complete");
             }
             else
             {
                 createState = NEW_NOTE;
-                pushMessage("New Note");
             }
         }
 
         playbackPos++;
+    }
+};
+
+struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+
+    SampleCreatorModule *module{nullptr};
+    static SampleCreatorLogWidget *create(const rack::Vec &pos, const rack::Vec &size,
+                                          SampleCreatorModule *m)
+    {
+        auto res = new SampleCreatorLogWidget();
+        res->box.size = size;
+        res->box.pos = pos;
+        res->module = m;
+
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawLog(a); });
+        res->addChild(res->bdw);
+        return res;
+    }
+
+    void drawLog(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        float x = 2, y = 2;
+        for (auto m : msgDeq)
+        {
+            nvgBeginPath(vg);
+            nvgFillColor(vg, sampleCreatorSkin.logText());
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+            nvgFontFaceId(vg, fid);
+            nvgFontSize(vg, 11);
+            nvgText(vg, x, y, m.c_str(), nullptr);
+            y += 12;
+        }
+    }
+
+    std::deque<std::string> msgDeq;
+    void step() override
+    {
+        if (module)
+        {
+            while (module->hasMessage())
+            {
+                msgDeq.push_back(module->popMessage());
+                if (msgDeq.size() > (box.size.y - 4) / 12)
+                    msgDeq.pop_front();
+
+                bdw->dirty = true;
+            }
+        }
+
+        rack::Widget::step();
+    }
+
+    void onSkinChanged() override
+    {
+        if (bdw)
+            bdw->dirty = true;
     }
 };
 
@@ -428,6 +514,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 }
             }
         }
+
+        auto log = SampleCreatorLogWidget::create(
+            rack::Vec(10, 140), rack::Vec(box.size.x - 20, box.size.y - 140 - 70), m);
+        addChild(log);
 
         {
             auto x = 10;
