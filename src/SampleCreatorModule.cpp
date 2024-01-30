@@ -260,6 +260,37 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         bg->box.pos = rack::Vec(0.0);
         bg->box.size = box.size;
         addChild(bg);
+        {
+            auto sOm = new rack::widget::SvgWidget;
+            auto Omsvg = APP->window->loadSvg(
+                rack::asset::plugin(pluginInstance, "res/Omri_Cohen_Logo.svg"));
+            sOm->setSvg(Omsvg);
+            sOm->box.pos = rack::Vec(0, 0);
+            sOm->wrap();
+
+            auto tw = new rack::widget::TransformWidget();
+            tw->box.pos = rack::Vec(100, box.size.y - 20);
+            tw->scale(0.025);
+            tw->addChild(sOm);
+
+            addChild(tw);
+        }
+
+        {
+            auto sOm = new rack::widget::SvgWidget;
+            auto Omsvg = APP->window->loadSvg(
+                rack::asset::plugin(pluginInstance, "res/BaconLogo.svg"));
+            sOm->setSvg(Omsvg);
+            sOm->box.pos = rack::Vec(0, 0);
+            sOm->wrap();
+
+            auto tw = new rack::widget::TransformWidget();
+            tw->box.pos = rack::Vec(210, box.size.y - 15);
+            tw->scale(0.35);
+            tw->addChild(sOm);
+
+            addChild(tw);
+        }
 
         int headerSize{38};
 
