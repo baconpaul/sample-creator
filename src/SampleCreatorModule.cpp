@@ -64,6 +64,11 @@ struct SampleCreatorModule : virtual rack::Module,
         MIDI_END_RANGE,
         MIDI_STEP_SIZE,
 
+        NUM_VEL_LAYERS,
+        NUM_ROUND_ROBINS,
+
+        GATE_TIME,
+
         NUM_PARAMS
     };
 
@@ -82,6 +87,9 @@ struct SampleCreatorModule : virtual rack::Module,
         OUTPUT_VOCT,
         OUTPUT_GATE,
         OUTPUT_VELOCITY,
+
+        OUTPUT_RR_UNI,
+        OUTPUT_RR_BI,
 
         NUM_OUTPUTS
     };
@@ -102,6 +110,8 @@ struct SampleCreatorModule : virtual rack::Module,
         configOutput(OUTPUT_VOCT, "VOct Output");
         configOutput(OUTPUT_GATE, "Gate Output");
         configOutput(OUTPUT_VELOCITY, "Velocity Output");
+        configOutput(OUTPUT_RR_UNI, "Unipolar (0-10v) Uniform RR CV");
+        configOutput(OUTPUT_RR_BI, "Bipolar (+/-5v) Uniform RR CV");
 
         auto p =
             configParam<MidiNoteParamQuantity>(MIDI_START_RANGE, 0, 127, 48, "MIDI Start Range");
@@ -112,6 +122,18 @@ struct SampleCreatorModule : virtual rack::Module,
 
         auto q = configParam(MIDI_STEP_SIZE, 1, 24, 4, "MIDI Step Size");
         q->snapEnabled = true;
+
+        {
+            auto q = configParam(NUM_VEL_LAYERS, 1, 8, 1, "Velocity Layers");
+            q->snapEnabled = true;
+        }
+
+        {
+            auto q = configParam(NUM_ROUND_ROBINS, 1, 16, 1, "Round Robins");
+            q->snapEnabled = true;
+        }
+
+        configParam(GATE_TIME, 0.2, 16, 1, "Gate Time", "s");
     }
 
     struct message_t
@@ -165,11 +187,16 @@ struct SampleCreatorModule : virtual rack::Module,
     fs::path currentSampleDir{};
     TinyWav tinyWavControl;
 
+    std::atomic<bool> testMode{false};
+    std::atomic<bool> startOperating{false};
+    std::atomic<bool> stopImmediately{false};
+
     void process(const ProcessArgs &args) override
     {
-        if (createState == INACTIVE && (inputs[INPUT_GO].getVoltage() > 2))
+        if (createState == INACTIVE && startOperating)
         {
             pushMessage("Starting Up");
+            startOperating = false;
             createState = NEW_NOTE;
             wavBlockPosition = 0;
             noteNumber = 60;
@@ -196,8 +223,25 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = GATED_RECORD;
 
             auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
-            auto res = tinywav_open_write(&tinyWavControl, 2, args.sampleRate, TW_FLOAT32,
-                                          TW_INTERLEAVED, fn.u8string().c_str());
+            if (!testMode)
+            {
+                auto res = tinywav_open_write(&tinyWavControl, 2, args.sampleRate, TW_FLOAT32,
+                                              TW_INTERLEAVED, fn.u8string().c_str());
+                if (res)
+                {
+                    // FIXME
+                }
+            }
+        }
+
+        if (stopImmediately)
+        {
+            if (!testMode && (createState == GATED_RECORD || createState == RELEASE_RECORD))
+            {
+                tinywav_close_write(&tinyWavControl);
+            }
+            createState = INACTIVE;
+            stopImmediately = false;
         }
 
         if (playbackPos > args.sampleRate && createState == GATED_RECORD)
@@ -212,7 +256,10 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage("Done");
             createState = SPINDOWN_BUFFER;
             playbackPos = 0;
-            tinywav_close_write(&tinyWavControl);
+            if (!testMode)
+            {
+                tinywav_close_write(&tinyWavControl);
+            }
         }
 
         if (createState != SPINDOWN_BUFFER)
@@ -222,7 +269,10 @@ struct SampleCreatorModule : virtual rack::Module,
             d[1] = inputs[INPUT_R].getVoltage();
 
             // Insanely inefficient
-            tinywav_write_f(&tinyWavControl, d, 1);
+            if (!testMode)
+            {
+                tinywav_write_f(&tinyWavControl, d, 1);
+            }
         }
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
@@ -331,15 +381,13 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto q = RACK_HEIGHT - 42;
             auto c1 = priorBSx * 0.14 + priorBSx * 0.5;
 
-            auto y = 20;
-            auto x = 20;
-            auto in =
-                rack::createInputCentered<SampleCreatorPort>(rack::Vec(x, y), module, M::INPUT_GO);
-            addInput(in);
-
-            for (auto [o, l] : {std::make_pair(M::OUTPUT_VOCT, "V/OCT"),
-                                {M::OUTPUT_VELOCITY, "VEL"},
-                                {M::OUTPUT_GATE, "GATE"}})
+            for (auto [o, l] : {
+                     std::make_pair(M::OUTPUT_VOCT, "V/OCT"),
+                     {M::OUTPUT_VELOCITY, "VEL"},
+                     {M::OUTPUT_GATE, "GATE"},
+                     {M::OUTPUT_RR_UNI, "RR UNI"},
+                     {M::OUTPUT_RR_BI, "RR BI"},
+                 })
             {
                 auto ot =
                     rack::createOutputCentered<SampleCreatorPort>(rack::Vec(c1, q), module, o);
@@ -356,9 +404,13 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         {
             auto x = 10;
             auto y = 60;
+            int idx = 0;
             for (auto [o, l] : {std::make_pair(M::MIDI_START_RANGE, "Start Note"),
                                 {M::MIDI_END_RANGE, "End Note"},
-                                {M::MIDI_STEP_SIZE, "Step"}})
+                                {M::MIDI_STEP_SIZE, "Step"},
+                                {M::NUM_VEL_LAYERS, "Vel Layers"},
+                                {M::NUM_ROUND_ROBINS, "Rnd Robins"},
+                                {M::GATE_TIME, "Gate Time"}})
             {
                 auto lw = PanelLabel::createCentered(rack::Vec(x + 30, y), 60, l);
                 addChild(lw);
@@ -368,14 +420,43 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 addChild(d);
 
                 y += 28;
+                idx++;
+                if (idx == 3)
+                {
+                    y = 60;
+                    x = 10 + 95 + 50 + 5;
+                }
             }
         }
+
         {
-            auto x = 10 + 95 + 50 + 5;
-            auto y = 60;
-            auto path = SCPanelPushButton::create(rack::Vec(x, y - 9), rack::Vec(60, 18),
-                                                  "Set Path", [this]() { selectPath(); });
-            addChild(path);
+            auto x = 10;
+            auto y = 10;
+
+            auto add = [&x, &y, this](auto lab, auto onc) {
+                auto bt = SCPanelPushButton::create(rack::Vec(x, y), rack::Vec(60, 18), lab, onc);
+                x += 63;
+                addChild(bt);
+            };
+
+            add("Test", [m]() {
+                if (m && m->createState == SampleCreatorModule::INACTIVE)
+                {
+                    m->testMode = true;
+                    m->startOperating = true;
+                }
+            });
+            add("Start", [m]() {
+                {
+                    m->testMode = false;
+                    m->startOperating = true;
+                }
+            });
+            add("Stop", [m]() {
+                if (m)
+                    m->stopImmediately = true;
+            });
+            add("Set Path", [this]() { selectPath(); });
         }
     }
 
@@ -391,6 +472,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         if (pt.empty())
         {
             pt = fs::path{rack::asset::userDir} / "SampleCreator";
+            fs::create_directories(pt);
         }
 
         char *path = osdialog_file(OSDIALOG_OPEN_DIR, pt.u8string().c_str(), "", NULL);

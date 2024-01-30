@@ -2,16 +2,20 @@ Nothing to see here.
 
 Steps to MVP
 
-- Pick a format ui but do nothing now
-- velocity ranges
-- round robin output on panel
-- round robin RNG
-- log messages onto display
-- gate time
-- release detection
+UI
+    - log messages onto display
 
-then
+Code in Engine:
+    - gate time
+    - release detection
+    - velocity ranges coded
+    - Round robins coded
 
+then ship to Omri (and maybe Andreya and Jacky also)
+
+Then:
+
+- Pick a format ui but do nothing now/ sfz/multisampe etc
 - poly rendering perhaps
 - Mod tinywav to also have an `inst` block
 - threading in process loop
