@@ -205,6 +205,12 @@ struct SampleCreatorModule : virtual rack::Module,
     std::atomic<bool> startOperating{false};
     std::atomic<bool> stopImmediately{false};
 
+    int64_t gateSamples;
+
+    static constexpr int silenceSamples{4096};
+    int silencePosition;
+    float silenceDetector[silenceSamples];
+
     void process(const ProcessArgs &args) override
     {
         if (createState == INACTIVE && startOperating)
@@ -235,9 +241,10 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (createState == NEW_NOTE)
         {
-            char ms[256];
+
             pushMessage(std::string("Starting note ") + std::to_string(noteNumber));
             playbackPos = 0;
+            gateSamples = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
             createState = GATED_RECORD;
 
             auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
@@ -264,21 +271,46 @@ struct SampleCreatorModule : virtual rack::Module,
             stopImmediately = false;
         }
 
-        if (playbackPos > args.sampleRate && createState == GATED_RECORD)
+        if (playbackPos > gateSamples && createState == GATED_RECORD)
         {
             createState = RELEASE_RECORD;
+            memset(&silenceDetector[0], 0, sizeof(silenceDetector));
+            silencePosition = 0;
+
             playbackPos = 0;
         }
 
-        if (playbackPos > args.sampleRate && createState == RELEASE_RECORD)
+        if (createState == RELEASE_RECORD)
         {
-            pushMessage("Note Render complete.");
-            createState = SPINDOWN_BUFFER;
-            playbackPos = 0;
-            if (!testMode)
+            float d[2];
+            d[0] = inputs[INPUT_L].getVoltage();
+            d[1] = inputs[INPUT_R].getVoltage();
+
+            silenceDetector[silencePosition] = std::fabs(d[0]) + std::fabs(d[1]);
+            silencePosition++;
+            if (silencePosition == silenceSamples)
             {
-                pushMessage("Closing File");
-                tinywav_close_write(&tinyWavControl);
+                silencePosition = 0;
+
+                bool silent{true};
+                int32_t spos{0};
+
+                while (silent && spos < silenceSamples)
+                {
+                    silent = silenceDetector[spos] < 1e-8;
+                    spos++;
+                }
+
+                if (silent)
+                {
+                    pushMessage("Note Render complete.");
+                    createState = SPINDOWN_BUFFER;
+                    playbackPos = 0;
+                    if (!testMode)
+                    {
+                        tinywav_close_write(&tinyWavControl);
+                    }
+                }
             }
         }
 
@@ -569,7 +601,6 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         if (path)
         {
             scm->currentSampleDir = fs::path{path};
-            std::cout << scm->currentSampleDir.u8string() << std::endl;
             free(path);
         }
     }

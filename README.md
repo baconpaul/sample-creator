@@ -3,8 +3,7 @@ Nothing to see here.
 Steps to MVP
 
 Code in Engine:
-    - gate time
-    - release detection
+    - keyboard ranges
     - velocity ranges coded
     - Round robins coded
 
