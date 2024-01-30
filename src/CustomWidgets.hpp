@@ -13,12 +13,38 @@
 
 #include "rack.hpp"
 
+#include "sst/rackhelpers/module_connector.h"
 #include "SampleCreatorSkin.hpp"
 
 namespace baconpaul::samplecreator
 {
 
-template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt> struct SCLabel : rack::Widget
+struct PQObserver
+{
+    float val{-10242132.f};
+    rack::Module *module{nullptr};
+    int paramId{0};
+    PQObserver(rack::Module *m, int p) : module(m), paramId(p) {}
+
+    bool isStale()
+    {
+        if (!module)
+            return false;
+        auto pq = module->getParamQuantity(paramId);
+        if (!pq)
+            return false;
+
+        if (pq->getValue() != val)
+        {
+            val = pq->getValue();
+            return true;
+        }
+        return false;
+    }
+};
+
+template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt, int halign = NVG_ALIGN_CENTER>
+struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
     std::string label;
@@ -51,25 +77,114 @@ template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt> struct SCLabel : rack
     {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
-        /*nvgBeginPath(vg);
-        nvgStrokeColor(vg, nvgRGB(0,255,0));
-        nvgRect(vg, 0, 0, box.size.x, box.size.y);
-        nvgStroke(vg);
-         */
+        if (false)
+        {
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, nvgRGB(0, 255, 0));
+            nvgRect(vg, 0, 0, box.size.x, box.size.y);
+            nvgStroke(vg);
+        }
 
         nvgBeginPath(vg);
         nvgFillColor(vg, (&sampleCreatorSkin->*txtcol)());
-        nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
         nvgFontFaceId(vg, fid);
         nvgFontSize(vg, pt);
-        nvgText(vg, box.size.x * 0.5, box.size.y * 0.5, label.c_str(), nullptr);
+        if (halign == NVG_ALIGN_RIGHT)
+        {
+            nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_RIGHT);
+            nvgText(vg, box.size.x, box.size.y * 0.5, label.c_str(), nullptr);
+        }
+        else if (halign == NVG_ALIGN_LEFT)
+        {
+            nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_LEFT);
+            nvgText(vg, 0, box.size.y * 0.5, label.c_str(), nullptr);
+        }
+        else
+        {
+            nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
+            nvgText(vg, box.size.x * 0.5, box.size.y * 0.5, label.c_str(), nullptr);
+        }
     }
+
+    void onSkinChanged() override { bdw->dirty = true; }
 };
 
 using InPortLabel = SCLabel<&SampleCreatorSkin::panelInputText, 11>;
 using OutPortLabel = SCLabel<&SampleCreatorSkin::panelOutputText, 11>;
+using PanelLabel = SCLabel<&SampleCreatorSkin::labeLText, 12, NVG_ALIGN_RIGHT>;
 
-template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
+struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    rack::Module *module{nullptr};
+    int paramId{0};
+
+    std::unique_ptr<PQObserver> obs;
+
+    static SCPanelParamDisplay *create(const rack::Vec &ctrLeft, int width, rack::Module *m,
+                                       int paramId)
+    {
+        auto ht = 18;
+        auto r = new SCPanelParamDisplay();
+
+        r->module = m;
+        r->paramId = paramId;
+
+        r->obs = std::make_unique<PQObserver>(m, paramId);
+
+        r->box.size = rack::Vec(width, ht);
+        r->box.pos = ctrLeft;
+        r->box.pos.y -= ht / 2;
+
+        r->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), r->box.size, [r](auto *a) { r->drawParam(a); });
+        r->bdw->dirty = true;
+        r->addChild(r->bdw);
+
+        return r;
+    }
+
+    void drawParam(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgFill(vg);
+
+        if (!module)
+        {
+            return;
+        }
+        auto pq = module->getParamQuantity(paramId);
+        if (!pq)
+        {
+            return;
+        }
+
+        auto v = pq->getDisplayValueString();
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(0, 255, 0));
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 12);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+        nvgText(vg, 3, box.size.y * 0.5, v.c_str(), nullptr);
+    }
+
+    void step() override
+    {
+        if (obs->isStale())
+        {
+            bdw->dirty = true;
+        }
+        rack::Widget::step();
+    }
+    void onSkinChanged() override { bdw->dirty = true; }
+};
+
+template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
     bool stripMenuTypein{false};
@@ -88,7 +203,6 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
 
     void drawKnob(NVGcontext *vg)
     {
-#if 0
         float radius = px * 0.48;
         nvgBeginPath(vg);
         nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, radius, radius);
@@ -141,17 +255,12 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
         nvgStrokeWidth(vg, 0.5);
         nvgStroke(vg);
         nvgFill(vg);
-#endif
     }
 
-    SampleCreatorSkin::Skin lastSkin{SampleCreatorSkin::DARK};
     float lastVal{0.f};
     void step() override
     {
         bool dirty{false};
-        if (lastSkin != sampleCreatorSkin.skin)
-            dirty = true;
-        lastSkin = sampleCreatorSkin.skin;
 
         auto pq = getParamQuantity();
         if (pq)
@@ -167,6 +276,8 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
         rack::Widget::step();
     }
 
+    void onSkinChanged() override { bdw->dirty = true; }
+
     void appendContextMenu(rack::Menu *menu) override
     {
         if (stripMenuTypein && menu->children.size() >= 2)
@@ -176,6 +287,27 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob
             delete *tgt;
         }
     }
+};
+
+struct SampleCreatorPort
+    : public sst::rackhelpers::module_connector::PortConnectionMixin<rack::app::SvgPort>,
+      public SampleCreatorSkin::Client
+{
+    SampleCreatorPort() { setPortGraphics(); }
+
+    void setPortGraphics()
+    {
+        if (sampleCreatorSkin.skin == SampleCreatorSkin::DARK)
+        {
+            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on.svg")));
+        }
+        else
+        {
+            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on_light.svg")));
+        }
+    }
+
+    void onSkinChanged() override { setPortGraphics(); }
 };
 
 } // namespace baconpaul::samplecreator

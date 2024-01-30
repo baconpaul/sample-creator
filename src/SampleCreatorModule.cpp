@@ -28,7 +28,6 @@ namespace fs = ghc::filesystem;
 #include "sst/rackhelpers/json.h"
 #include "sst/rackhelpers/ui.h"
 #include "sst/rackhelpers/neighbor_connectable.h"
-#include "sst/rackhelpers/module_connector.h"
 
 #include "SampleCreatorSkin.hpp"
 #include "CustomWidgets.hpp"
@@ -42,6 +41,10 @@ struct SampleCreatorModule : virtual rack::Module,
 {
     enum ParamIds
     {
+        MIDI_START_RANGE,
+        MIDI_END_RANGE,
+        MIDI_STEP_SIZE,
+
         NUM_PARAMS
     };
 
@@ -80,6 +83,15 @@ struct SampleCreatorModule : virtual rack::Module,
         configOutput(OUTPUT_VOCT, "VOct Output");
         configOutput(OUTPUT_GATE, "Gate Output");
         configOutput(OUTPUT_VELOCITY, "Velocity Output");
+
+        auto p = configParam(MIDI_START_RANGE, 0, 127, 48, "MIDI Start Range");
+        p->snapEnabled = true;
+
+        p = configParam(MIDI_END_RANGE, 0, 127, 72, "MIDI Start Range");
+        p->snapEnabled = true;
+
+        p = configParam(MIDI_STEP_SIZE, 1, 24, 4, "MIDI Step Size");
+        p->snapEnabled = true;
     }
 
     struct message_t
@@ -212,35 +224,6 @@ struct SampleCreatorModule : virtual rack::Module,
     }
 };
 
-struct SampleCreatorPort
-    : public sst::rackhelpers::module_connector::PortConnectionMixin<rack::app::SvgPort>
-{
-    SampleCreatorPort() { setPortGraphics(); }
-
-    void setPortGraphics()
-    {
-        if (sampleCreatorSkin.skin == SampleCreatorSkin::DARK)
-        {
-            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on.svg")));
-        }
-        else
-        {
-            setSvg(rack::Svg::load(rack::asset::plugin(pluginInstance, "res/port_on_light.svg")));
-        }
-    }
-
-    SampleCreatorSkin::Skin lastSkin{SampleCreatorSkin::DARK};
-    void step() override
-    {
-        bool dirty{false};
-        if (lastSkin != sampleCreatorSkin.skin)
-            setPortGraphics();
-        lastSkin = sampleCreatorSkin.skin;
-
-        rack::Widget::step();
-    }
-};
-
 struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 {
     typedef SampleCreatorModule M;
@@ -296,8 +279,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto q = RACK_HEIGHT - 42;
             auto c1 = priorBSx * 0.14 + priorBSx * 0.5;
 
-            auto y = 50;
-            auto x = 40;
+            auto y = 20;
+            auto x = 20;
             auto in =
                 rack::createInputCentered<SampleCreatorPort>(rack::Vec(x, y), module, M::INPUT_GO);
             addInput(in);
@@ -314,6 +297,25 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 addChild(lab);
 
                 c1 += priorBSx * 0.25;
+            }
+        }
+
+        // OK so start aying out the midi section
+        {
+            auto x = 10;
+            auto y = 60;
+            for (auto [o, l] : {std::make_pair(M::MIDI_START_RANGE, "Start Note"),
+                                {M::MIDI_END_RANGE, "End Note"},
+                                {M::MIDI_STEP_SIZE, "Step"}})
+            {
+                auto lw = PanelLabel::createCentered(rack::Vec(x + 30, y), 60, l);
+                addChild(lw);
+                auto k = rack::createParamCentered<PixelKnob<20>>(rack::Vec(x + 75, y), module, o);
+                addChild(k);
+                auto d = SCPanelParamDisplay::create(rack::Vec(x + 95, y), 40, module, o);
+                addChild(d);
+
+                y += 28;
             }
         }
     }

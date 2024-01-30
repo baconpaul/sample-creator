@@ -76,11 +76,6 @@ struct SampleCreatorSkin
     NVGcolor n() { return dl(d, l); }
 
     /*
-    COL(knobCenter, nvgRGB(110, 110, 120), nvgRGB(185, 185, 220));
-    COL(knobEdge, nvgRGB(110, 110, 130), nvgRGB(190, 190, 225));
-    COL(knobStroke, nvgRGB(20, 20, 20), nvgRGB(50, 50, 60));
-    COL(knobValueFill, nvgRGB(240, 240, 240), nvgRGB(20, 20, 20));
-    COL(knobValueStroke, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
 
     COL(labeLText, nvgRGB(220, 220, 220), nvgRGB(20, 20, 20));
     COL(labelRule, nvgRGB(110, 110, 120), nvgRGB(150, 150, 160));
@@ -109,6 +104,14 @@ struct SampleCreatorSkin
 
      */
 
+    COL(labeLText, nvgRGB(220, 220, 220), nvgRGB(20, 20, 20));
+
+    COL(knobCenter, nvgRGB(110, 110, 120), nvgRGB(185, 185, 220));
+    COL(knobEdge, nvgRGB(110, 110, 130), nvgRGB(190, 190, 225));
+    COL(knobStroke, nvgRGB(20, 20, 20), nvgRGB(50, 50, 60));
+    COL(knobValueFill, nvgRGB(240, 240, 240), nvgRGB(20, 20, 20));
+    COL(knobValueStroke, nvgRGB(20, 20, 20), nvgRGB(20, 20, 20));
+
     COL(moduleOutline, nvgRGB(100, 100, 100), nvgRGB(100, 100, 100));
 
     COL(panelGradientStart, nvgRGB(20, 20, 25), nvgRGB(225, 225, 230));
@@ -126,7 +129,6 @@ struct SampleCreatorSkin
     COL(panelOutputText, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
 
     COL(panelBrandText, nvgRGB(200, 200, 220), nvgRGB(0, 0, 0));
-
 };
 
 extern SampleCreatorSkin sampleCreatorSkin;
