@@ -43,6 +43,30 @@ struct PQObserver
     }
 };
 
+struct PQStringObserver
+{
+    std::string val{"867-5309"};
+    rack::Module *module{nullptr};
+    int paramId{0};
+    PQStringObserver(rack::Module *m, int p) : module(m), paramId(p) {}
+
+    bool isStale()
+    {
+        if (!module)
+            return false;
+        auto pq = module->getParamQuantity(paramId);
+        if (!pq)
+            return false;
+
+        if (pq->getDisplayValueString() != val)
+        {
+            val = pq->getDisplayValueString();
+            return true;
+        }
+        return false;
+    }
+};
+
 template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt, int halign = NVG_ALIGN_CENTER>
 struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 {
@@ -119,7 +143,7 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
     rack::Module *module{nullptr};
     int paramId{0};
 
-    std::unique_ptr<PQObserver> obs;
+    std::unique_ptr<PQStringObserver> obs;
 
     static SCPanelParamDisplay *create(const rack::Vec &ctrLeft, int width, rack::Module *m,
                                        int paramId)
@@ -130,7 +154,7 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
         r->module = m;
         r->paramId = paramId;
 
-        r->obs = std::make_unique<PQObserver>(m, paramId);
+        r->obs = std::make_unique<PQStringObserver>(m, paramId);
 
         r->box.size = rack::Vec(width, ht);
         r->box.pos = ctrLeft;
@@ -148,8 +172,11 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
     {
         nvgBeginPath(vg);
         nvgFillColor(vg, nvgRGB(255, 0, 0));
-        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
         nvgFill(vg);
+        nvgStroke(vg);
 
         if (!module)
         {
@@ -165,7 +192,7 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
         nvgBeginPath(vg);
-        nvgFillColor(vg, nvgRGB(0, 255, 0));
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayText());
         nvgFontFaceId(vg, fid);
         nvgFontSize(vg, 12);
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
@@ -206,13 +233,29 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         float radius = px * 0.48;
         nvgBeginPath(vg);
         nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, radius, radius);
-        nvgFillPaint(vg, nvgRadialGradient(vg, box.size.x * 0.5, box.size.y * 0.5, box.size.x * 0.1,
-                                           box.size.x * 0.4, sampleCreatorSkin.knobCenter(),
-                                           sampleCreatorSkin.knobEdge()));
+
+        auto lighter = [](auto a, auto f) {
+            a.r = std::clamp(a.r * f, 0., 255.);
+            a.g = std::clamp(a.g * f, 0., 255.);
+            a.b = std::clamp(a.b * f, 0., 255.);
+            return a;
+        };
+        nvgFillPaint(vg, nvgLinearGradient(vg, 0, 0, 0, box.size.y,
+                                           lighter(sampleCreatorSkin.knobGradientTop(), 1.3),
+                                           lighter(sampleCreatorSkin.knobGradientBottom(), 1.1)));
         nvgStrokeColor(vg, sampleCreatorSkin.knobStroke());
         nvgStrokeWidth(vg, 0.5);
         nvgFill(vg);
         nvgStroke(vg);
+
+        nvgBeginPath(vg);
+        nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, radius - 1.5, radius - 1.5);
+        nvgFillPaint(vg,
+                     nvgLinearGradient(vg, 0, 0, 0, box.size.y, sampleCreatorSkin.knobGradientTop(),
+                                       sampleCreatorSkin.knobGradientBottom()));
+        nvgStrokeColor(vg, sampleCreatorSkin.knobStroke());
+        nvgStrokeWidth(vg, 0.5);
+        nvgFill(vg);
 
         auto pq = getParamQuantity();
         if (!pq)

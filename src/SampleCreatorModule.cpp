@@ -36,6 +36,24 @@ namespace fs = ghc::filesystem;
 
 namespace baconpaul::samplecreator
 {
+
+struct MidiNoteParamQuantity : rack::ParamQuantity
+{
+    std::vector<std::string> notes{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+
+    std::string getDisplayValueString() override
+    {
+        auto v = (int)std::round(getValue());
+        auto oct = v / 12 - 1;
+        auto nt = v % 12;
+
+        char res[256];
+        snprintf(res, 256, "%s%d (%d)", notes[nt].c_str(), oct, v);
+        return std::string(res);
+    }
+    void setDisplayValueString(std::string s) override { ParamQuantity::setDisplayValueString(s); }
+};
+
 struct SampleCreatorModule : virtual rack::Module,
                              sst::rackhelpers::module_connector::NeighborConnectable_V1
 {
@@ -84,14 +102,15 @@ struct SampleCreatorModule : virtual rack::Module,
         configOutput(OUTPUT_GATE, "Gate Output");
         configOutput(OUTPUT_VELOCITY, "Velocity Output");
 
-        auto p = configParam(MIDI_START_RANGE, 0, 127, 48, "MIDI Start Range");
+        auto p =
+            configParam<MidiNoteParamQuantity>(MIDI_START_RANGE, 0, 127, 48, "MIDI Start Range");
         p->snapEnabled = true;
 
-        p = configParam(MIDI_END_RANGE, 0, 127, 72, "MIDI Start Range");
+        p = configParam<MidiNoteParamQuantity>(MIDI_END_RANGE, 0, 127, 72, "MIDI Start Range");
         p->snapEnabled = true;
 
-        p = configParam(MIDI_STEP_SIZE, 1, 24, 4, "MIDI Step Size");
-        p->snapEnabled = true;
+        auto q = configParam(MIDI_STEP_SIZE, 1, 24, 4, "MIDI Step Size");
+        q->snapEnabled = true;
     }
 
     struct message_t
@@ -312,7 +331,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 addChild(lw);
                 auto k = rack::createParamCentered<PixelKnob<20>>(rack::Vec(x + 75, y), module, o);
                 addChild(k);
-                auto d = SCPanelParamDisplay::create(rack::Vec(x + 95, y), 40, module, o);
+                auto d = SCPanelParamDisplay::create(rack::Vec(x + 95, y), 50, module, o);
                 addChild(d);
 
                 y += 28;
