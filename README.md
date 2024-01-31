@@ -7,7 +7,6 @@ Big swaths of work until there is though
   - Also block out the writes into chunks to
     improve performance
 - Format Support
-  - mono wav if no input given
   - Is the inst block correct? Endpoint check etc
   - SFZ file support
   - bws/presonus multisample xml
