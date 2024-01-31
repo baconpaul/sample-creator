@@ -34,6 +34,8 @@ namespace fs = ghc::filesystem;
 #include "SampleCreatorSkin.hpp"
 #include "CustomWidgets.hpp"
 
+#include <random>
+
 #define MAX_POLY 16
 
 namespace baconpaul::samplecreator
@@ -139,6 +141,9 @@ struct SampleCreatorModule : virtual rack::Module,
         pushMessage("Sample Creator Started");
     }
 
+    std::default_random_engine reng;
+    std::uniform_real_distribution<float> uniReal{0.f, 1.f};
+
     struct message_t
     {
         static constexpr size_t slen{256};
@@ -186,7 +191,7 @@ struct SampleCreatorModule : virtual rack::Module,
     static constexpr int wavBlockSize{256};
     float wavBlock[2][wavBlockSize]{};
     std::size_t wavBlockPosition{0};
-    uint32_t noteNumber{60};
+
     uint64_t playbackPos{0};
 
     enum CreateState
@@ -211,6 +216,17 @@ struct SampleCreatorModule : virtual rack::Module,
     int silencePosition;
     float silenceDetector[silenceSamples];
 
+    struct RenderJob
+    {
+        int midiNote, noteFrom, noteTo;
+        int velocity{90}, velFrom, velTo;
+        int roundRobinIndex{0};
+        float rrRand[2];
+    };
+
+    std::deque<RenderJob> renderJobs;
+    RenderJob currentJob;
+
     void process(const ProcessArgs &args) override
     {
         if (createState == INACTIVE && startOperating)
@@ -220,7 +236,6 @@ struct SampleCreatorModule : virtual rack::Module,
             startOperating = false;
             createState = NEW_NOTE;
             wavBlockPosition = 0;
-            noteNumber = (int)std::round(getParam(MIDI_START_RANGE).getValue());
 
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
@@ -229,25 +244,79 @@ struct SampleCreatorModule : virtual rack::Module,
                 fs::create_directories(currentSampleDir);
                 pushMessage("Writing to '" + currentSampleDir.u8string() + "'");
             }
-        }
 
-        outputs[OUTPUT_VOCT].setVoltage(std::clamp((float)noteNumber / 12.f - 5.f, -5.f, 5.f));
-        outputs[OUTPUT_GATE].setVoltage((createState == GATED_RECORD) * 10.f);
+            auto numVel = (int)std::round(getParam(NUM_VEL_LAYERS).getValue());
+            auto numRR = (int)std::round(getParam(NUM_ROUND_ROBINS).getValue());
+            auto midiStep = (int)std::round(getParam(MIDI_STEP_SIZE).getValue());
+            auto midiHalf = midiStep <= 2 ? 0 : midiStep / 2;
+
+            auto midiStart = (int)std::round(getParam(MIDI_START_RANGE).getValue());
+            auto midiEnd = (int)std::round(getParam(MIDI_END_RANGE).getValue());
+
+            renderJobs.clear();
+            for (int mn = midiStart + midiHalf; mn <= midiEnd; mn += midiStep)
+            {
+                auto nf = mn - midiHalf;
+                auto nt = mn + midiStep - 1 - (midiStep > 2);
+                if (mn + midiStep > midiEnd)
+                    nt = midiEnd;
+
+                auto dVel = 1.0 / (numVel);
+
+                RenderJob mrj;
+                mrj.midiNote = mn;
+                mrj.noteFrom = nf;
+                mrj.noteTo = nt;
+
+                for (int vl = 0; vl < numVel; ++vl)
+                {
+                    auto bv = (vl + 0.5) * dVel;
+                    auto sv = vl * dVel;
+                    auto ev = (vl + 1) * dVel;
+                    auto mv = (int)std::round(std::clamp(sqrt(bv), 0., 1.) * 127);
+                    auto msv = (int)std::round(std::clamp(sqrt(sv), 0., 1.) * 127);
+                    auto mev = (int)std::round(std::clamp(sqrt(ev), 0., 1.) * 127);
+
+                    auto vrj = mrj;
+                    vrj.velocity = mv;
+                    vrj.velFrom = msv;
+                    vrj.velTo = mev;
+
+                    for (int rr = 0; rr < numRR; ++rr)
+                    {
+                        auto rj = vrj;
+                        rj.roundRobinIndex = rr;
+                        rj.rrRand[0] = uniReal(reng) * 10.f;
+                        rj.rrRand[1] = uniReal(reng) * 10.f - 5.f;
+                        renderJobs.push_back(rj);
+                    }
+                }
+            }
+            pushMessage(std::string("Generated render jobs: " + std::to_string(renderJobs.size()) +
+                                    " renders"));
+        }
 
         if (createState == INACTIVE)
         {
+            outputs[OUTPUT_VOCT].setVoltage(0.f);
+            outputs[OUTPUT_GATE].setVoltage(0.f);
             return;
         }
 
         if (createState == NEW_NOTE)
         {
+            currentJob = renderJobs.front();
+            renderJobs.pop_front();
 
-            pushMessage(std::string("Starting note ") + std::to_string(noteNumber));
+            pushMessage(std::string("Starting note ") + std::to_string(currentJob.midiNote));
             playbackPos = 0;
             gateSamples = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
             createState = GATED_RECORD;
 
-            auto fn = currentSampleDir / ("sample_midi_" + std::to_string(noteNumber) + ".wav");
+            auto bn = std::string("sample_vel_") + std::to_string(currentJob.velocity) + "_rr_" +
+                      std::to_string(currentJob.roundRobinIndex) + "_note_" +
+                      std::to_string(currentJob.midiNote) + ".wav";
+            auto fn = currentSampleDir / bn;
             if (!testMode)
             {
                 pushMessage("Writing file '" + fn.filename().u8string() + "'");
@@ -259,6 +328,14 @@ struct SampleCreatorModule : virtual rack::Module,
                 }
             }
         }
+
+        outputs[OUTPUT_VOCT].setVoltage(
+            std::clamp((float)currentJob.midiNote / 12.f - 5.f, -5.f, 5.f));
+        outputs[OUTPUT_GATE].setVoltage((createState == GATED_RECORD) * 10.f);
+        outputs[OUTPUT_VELOCITY].setVoltage(
+            std::clamp((float)currentJob.velocity / 12.7f, 0.f, 10.f));
+        outputs[OUTPUT_RR_UNI].setVoltage(currentJob.rrRand[0]);
+        outputs[OUTPUT_RR_BI].setVoltage(currentJob.rrRand[1]);
 
         if (stopImmediately)
         {
@@ -329,9 +406,7 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
         {
-            noteNumber++;
-            auto endNumber = (int)std::round(getParam(MIDI_END_RANGE).getValue());
-            if (noteNumber > endNumber)
+            if (renderJobs.empty())
             {
                 createState = INACTIVE;
                 pushMessage("Render Complete");

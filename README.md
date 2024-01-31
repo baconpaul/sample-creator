@@ -2,15 +2,10 @@ Nothing to see here.
 
 Steps to MVP
 
-Code in Engine:
-    - velocity ranges coded
-    - Round robins coded
-
-then ship to Omri (and maybe Andreya and Jacky also)
 
 Then:
 
-- Pick a format ui but do nothing now/ sfz/multisampe etc
-- poly rendering perhaps
 - Mod tinywav to also have an `inst` block
-- threading in process loop
+- top priority: threading in process loop and i/o off the audio thread
+- Pick a format ui but do nothing now. Support sfz/multisample/just files
+- poly rendering perhaps
