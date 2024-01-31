@@ -22,7 +22,6 @@
 #include <ghc/filesystem.hpp>
 namespace fs = ghc::filesystem;
 
-#include <tinywav.h>
 #include <osdialog.h>
 
 #include "sst/cpputils/ring_buffer.h"
@@ -33,6 +32,7 @@ namespace fs = ghc::filesystem;
 
 #include "SampleCreatorSkin.hpp"
 #include "CustomWidgets.hpp"
+#include "RIFFWavWriter.hpp"
 
 #include <random>
 
@@ -204,7 +204,8 @@ struct SampleCreatorModule : virtual rack::Module,
     } createState{INACTIVE};
 
     fs::path currentSampleDir{};
-    TinyWav tinyWavControl;
+
+    riffwav::RIFFWavWriter riffWavWriter;
 
     std::atomic<bool> testMode{false};
     std::atomic<bool> startOperating{false};
@@ -320,12 +321,11 @@ struct SampleCreatorModule : virtual rack::Module,
             if (!testMode)
             {
                 pushMessage("Writing file '" + fn.filename().u8string() + "'");
-                auto res = tinywav_open_write(&tinyWavControl, 2, args.sampleRate, TW_FLOAT32,
-                                              TW_INTERLEAVED, fn.u8string().c_str());
-                if (res)
-                {
-                    pushMessage("File failed to open");
-                }
+                riffWavWriter = riffwav::RIFFWavWriter(fn);
+                riffWavWriter.openFile();
+                riffWavWriter.writeRIFFHeader();
+                riffWavWriter.writeFMTChunk(args.sampleRate);
+                riffWavWriter.startDataChunk();
             }
         }
 
@@ -342,10 +342,11 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage("Stopping operation");
             if (!testMode && (createState == GATED_RECORD || createState == RELEASE_RECORD))
             {
-                tinywav_close_write(&tinyWavControl);
+                riffWavWriter.closeFile();
             }
             createState = INACTIVE;
             stopImmediately = false;
+            return;
         }
 
         if (playbackPos > gateSamples && createState == GATED_RECORD)
@@ -360,8 +361,8 @@ struct SampleCreatorModule : virtual rack::Module,
         if (createState == RELEASE_RECORD)
         {
             float d[2];
-            d[0] = inputs[INPUT_L].getVoltage();
-            d[1] = inputs[INPUT_R].getVoltage();
+            d[0] = inputs[INPUT_L].getVoltage() / 5.f;
+            d[1] = inputs[INPUT_R].getVoltage() / 5.f;
 
             silenceDetector[silencePosition] = std::fabs(d[0]) + std::fabs(d[1]);
             silencePosition++;
@@ -385,7 +386,7 @@ struct SampleCreatorModule : virtual rack::Module,
                     playbackPos = 0;
                     if (!testMode)
                     {
-                        tinywav_close_write(&tinyWavControl);
+                        riffWavWriter.closeFile();
                     }
                 }
             }
@@ -394,13 +395,13 @@ struct SampleCreatorModule : virtual rack::Module,
         if (createState != SPINDOWN_BUFFER)
         {
             float d[2];
-            d[0] = inputs[INPUT_L].getVoltage();
-            d[1] = inputs[INPUT_R].getVoltage();
+            d[0] = inputs[INPUT_L].getVoltage() / 5.f;
+            d[1] = inputs[INPUT_R].getVoltage() / 5.f;
 
             // Insanely inefficient
             if (!testMode)
             {
-                tinywav_write_f(&tinyWavControl, d, 1);
+                riffWavWriter.pushSamples(d);
             }
         }
 

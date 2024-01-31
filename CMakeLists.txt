@@ -7,8 +7,6 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 add_subdirectory(libs/sst-rackhelpers)
 add_subdirectory(libs/sst-cpputils)
-add_library(tinywav libs/tinywav/tinywav.c)
-target_include_directories(tinywav PUBLIC libs/tinywav)
 
 set(PLUGIN_NAME ${PROJECT_NAME})
 set(ADDITIONAL_PLUGIN_DISTRIBUTABLES res LICENSE.md README.md)
@@ -26,7 +24,7 @@ target_sources(${RACK_PLUGIN_LIB} PRIVATE
         )
 
 target_compile_options(${RACK_PLUGIN_LIB} PUBLIC -Wno-suggest-override -Wno-multichar -Wno-unused-value -Wno-unused-but-set-variable -Wno-unused-variable )
-target_link_libraries(${RACK_PLUGIN_LIB} PUBLIC sst-rackhelpers sst-cpputils tinywav)
+target_link_libraries(${RACK_PLUGIN_LIB} PUBLIC sst-rackhelpers sst-cpputils)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU")
     target_compile_options(${RACK_PLUGIN_LIB} PUBLIC -Wno-stringop-truncation)
