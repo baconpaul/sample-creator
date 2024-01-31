@@ -31,9 +31,11 @@ struct RIFFWavWriter
     size_t dataSizeLocation{0};
     size_t dataLen{0};
 
+    uint16_t nChannels{2};
+
     RIFFWavWriter() {}
 
-    RIFFWavWriter(const fs::path &p) : outPath(p) {}
+    RIFFWavWriter(const fs::path &p, uint16_t chan) : outPath(p), nChannels(chan) {}
     ~RIFFWavWriter() { closeFile(); }
 
     void writeRIFFHeader()
@@ -48,12 +50,12 @@ struct RIFFWavWriter
     {
         pushc4('f', 'm', 't', ' ');
         pushi32(16);
-        pushi16(3); // IEEE float
-        pushi16(2); // channels
+        pushi16(3);         // IEEE float
+        pushi16(nChannels); // channels
         pushi32(samplerate);
-        pushi32(samplerate * 2 * 4); // channels * bytes * samplerate
-        pushi16(2 * 4);              // align on pair of 4 byte samples
-        pushi16(8 * 4);              // bits per sample
+        pushi32(samplerate * nChannels * 4); // channels * bytes * samplerate
+        pushi16(nChannels * 4);              // align on pair of 4 byte samples
+        pushi16(8 * 4);                      // bits per sample
     }
 
     void writeINSTChunk(char keyroot, char keylow, char keyhigh, char vellow, char velhigh)
@@ -79,7 +81,7 @@ struct RIFFWavWriter
 
     void pushSamples(float d[2])
     {
-        elementsWritten += fwrite(d, 1, 2 * sizeof(float), outf);
+        elementsWritten += fwrite(d, 1, nChannels * sizeof(float), outf);
         dataLen += 8;
     }
 

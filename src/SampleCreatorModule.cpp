@@ -320,8 +320,10 @@ struct SampleCreatorModule : virtual rack::Module,
             auto fn = currentSampleDir / bn;
             if (!testMode)
             {
-                pushMessage("Writing file '" + fn.filename().u8string() + "'");
-                riffWavWriter = riffwav::RIFFWavWriter(fn);
+                int nChannels = inputs[INPUT_R].isConnected() ? 2 : 1;
+                pushMessage(std::string("Writing ") + (nChannels == 2 ? "stereo" : "mono") +
+                            " file '" + fn.filename().u8string() + "'");
+                riffWavWriter = riffwav::RIFFWavWriter(fn, nChannels);
                 riffWavWriter.openFile();
                 riffWavWriter.writeRIFFHeader();
                 riffWavWriter.writeFMTChunk(args.sampleRate);
@@ -429,6 +431,7 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
 
+    static constexpr int linesz{9};
     SampleCreatorModule *module{nullptr};
     static SampleCreatorLogWidget *create(const rack::Vec &pos, const rack::Vec &size,
                                           SampleCreatorModule *m)
@@ -462,9 +465,9 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
             nvgFillColor(vg, sampleCreatorSkin.logText());
             nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
             nvgFontFaceId(vg, fid);
-            nvgFontSize(vg, 11);
+            nvgFontSize(vg, linesz - 1);
             nvgText(vg, x, y, m.c_str(), nullptr);
-            y += 12;
+            y += linesz;
         }
     }
 
@@ -476,7 +479,7 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
             while (module->hasMessage())
             {
                 msgDeq.push_back(module->popMessage());
-                if (msgDeq.size() > (box.size.y - 4) / 12)
+                if (msgDeq.size() > (box.size.y - 4) / linesz)
                     msgDeq.pop_front();
 
                 bdw->dirty = true;
@@ -627,8 +630,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             }
         }
 
+        auto lwp = 230;
         auto log = SampleCreatorLogWidget::create(
-            rack::Vec(10, 140), rack::Vec(box.size.x - 20, box.size.y - 140 - 70), m);
+            rack::Vec(10, lwp), rack::Vec(box.size.x - 20, box.size.y - lwp - 65), m);
         addChild(log);
 
         {

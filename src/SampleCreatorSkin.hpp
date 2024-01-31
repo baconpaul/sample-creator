@@ -110,7 +110,7 @@ struct SampleCreatorSkin
     COL(pushButtonText, nvgRGB(50, 50, 60), nvgRGB(50, 50, 60));
     COL(pushButtonHoverText, nvgRGB(210, 210, 220), nvgRGB(210, 210, 220));
 
-    COL(logText, nvgRGB(200, 200, 220), nvgRGB(200, 200, 220));
+    COL(logText, nvgRGB(20, 240, 20), nvgRGB(20, 240, 20));
 };
 
 extern SampleCreatorSkin sampleCreatorSkin;
