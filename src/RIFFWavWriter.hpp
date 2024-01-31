@@ -56,7 +56,19 @@ struct RIFFWavWriter
         pushi16(8 * 4);              // bits per sample
     }
 
-    void writeINSTChunk() {}
+    void writeINSTChunk(char keyroot, char keylow, char keyhigh, char vellow, char velhigh)
+    {
+        pushc4('i', 'n', 's', 't');
+        pushi32(8);
+        pushi8(keyroot);
+        pushi8(0);
+        pushi8(127);
+        pushi8(keylow);
+        pushi8(keyhigh);
+        pushi8(vellow);
+        pushi8(velhigh);
+        pushi8(0);
+    }
 
     void startDataChunk()
     {
@@ -85,6 +97,7 @@ struct RIFFWavWriter
 
     void pushi16(int16_t i) { elementsWritten += fwrite(&i, sizeof(char), sizeof(uint16_t), outf); }
 
+    void pushi8(char i) { elementsWritten += std::fwrite(&i, 1, 1, outf); }
     void openFile()
     {
         elementsWritten = 0;

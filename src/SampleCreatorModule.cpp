@@ -325,6 +325,9 @@ struct SampleCreatorModule : virtual rack::Module,
                 riffWavWriter.openFile();
                 riffWavWriter.writeRIFFHeader();
                 riffWavWriter.writeFMTChunk(args.sampleRate);
+                riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
+                                             currentJob.noteTo, currentJob.velFrom,
+                                             currentJob.velTo);
                 riffWavWriter.startDataChunk();
             }
         }
