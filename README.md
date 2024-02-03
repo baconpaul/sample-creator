@@ -2,16 +2,14 @@ Nothing to see here.
 
 Big swaths of work until there is though
 
-- Audio Thread
-  - Don't do the IO on the audio thread, dummy
-  - Also block out the writes into chunks to
-    improve performance
+- Audio Thread and Render Thread
+  - Block out the writes so that you don't have as many messages
 - Format Support
   - Is the inst block correct? Endpoint check etc
   - SFZ file support
   - bws/presonus multisample xml
 - UI
-  - Show the keyboard as a 'rpgoress bar'
+  - Show the keyboard as a 'progress bar'
   - Value fields for notes gets typein support
   - VU Meter / Recording Status
   - An actual design! Lets hope Steve bites :)

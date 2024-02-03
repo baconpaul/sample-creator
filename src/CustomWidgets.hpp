@@ -13,6 +13,7 @@
 
 #include "rack.hpp"
 
+#include <sst/rackhelpers/ui.h>
 #include "sst/rackhelpers/module_connector.h"
 #include "SampleCreatorSkin.hpp"
 
