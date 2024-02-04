@@ -4,7 +4,6 @@ Big swaths of work until there is though
 
 - Format Support
   - Is the inst block correct? Endpoint check etc
-  - SFZ file support
   - bws/presonus multisample xml
 - UI
   - Show the keyboard as a 'progress bar'
