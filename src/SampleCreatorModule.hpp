@@ -256,15 +256,19 @@ struct SampleCreatorModule : virtual rack::Module,
                             auto fn = currentSampleDir / "sample.sfz";
                             sfzFile = std::ofstream(fn);
                             sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
+                            sfzFile << "<global>\n" << std::flush;
                         }
                     }
                     break;
                     case RenderThreadCommand::END_RENDER:
                     {
+                        pushMessage("END RENDER");
                         if (!testMode)
                         {
+                            pushMessage("Closing SFZ File");
                             if (sfzFile.is_open())
                             {
+                                pushMessage("Which is open" );
                                 sfzFile.close();
                             }
                         }
@@ -287,7 +291,6 @@ struct SampleCreatorModule : virtual rack::Module,
             using namespace std::chrono_literals;
             std::this_thread::sleep_for(20ms);
         }
-        std::cout << "Render thread done" << std::endl;
     }
 
     void renderThreadNewNote(int jobid, double sr)
@@ -295,9 +298,9 @@ struct SampleCreatorModule : virtual rack::Module,
         auto &currentJob = renderJobs[jobid];
         pushMessage(std::string("Starting note ") + std::to_string(currentJob.midiNote));
 
-        auto bn = std::string("sample") + "_note_" + std::to_string(currentJob.midiNote) + "_vel_" +
-                  std::to_string(currentJob.velocity) + "_rr_" +
-                  std::to_string(currentJob.roundRobinIndex) + ".wav";
+        auto bn = std::string("sample") + "_note_" + std::to_string((int)currentJob.midiNote) + "_vel_" +
+                  std::to_string((int)currentJob.velocity) + "_rr_" +
+                  std::to_string((int)currentJob.roundRobinIndex) + ".wav";
         auto fn = currentSampleDir / bn;
         if (!testMode)
         {
@@ -314,14 +317,17 @@ struct SampleCreatorModule : virtual rack::Module,
 
             if (currentJob.roundRobinIndex == 0)
             {
-                sfzFile << "\n<group> lokey=" << currentJob.noteFrom
-                        << " hikey=" << currentJob.noteTo
-                        << " pitch_keycenter=" << currentJob.midiNote
-                        << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo
-                        << " seq_length=" << currentJob.roundRobinOutOf << "\n";
+                sfzFile << "\n<group> "
+                        << " seq_length=" << currentJob.roundRobinOutOf << "\n" << std::flush;
             }
-            sfzFile << "<region>seq_position=" << currentJob.roundRobinIndex + 1 << " sample=" << bn
-                    << "\n";
+
+            sfzFile << "<region>seq_position=" << (currentJob.roundRobinIndex + 1)
+                    << " sample=" << fn.filename().u8string().c_str()
+                    << " lokey=" << currentJob.noteFrom
+                    << " hikey=" << currentJob.noteTo
+                    << " pitch_keycenter=" << currentJob.midiNote
+                    << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo
+                    << "\n" << std::flush;
         }
     }
 
@@ -529,7 +535,7 @@ struct SampleCreatorModule : virtual rack::Module,
             if ((size_t)currentJobIndex == renderJobs.size() - 1)
             {
                 createState = INACTIVE;
-                renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::START_RENDER});
+                renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::END_RENDER});
 
                 pushMessage("Render Complete");
             }
