@@ -175,10 +175,6 @@ struct SampleCreatorModule : virtual rack::Module,
 
     void dataFromJson(json_t *rootJ) override { namespace jh = sst::rackhelpers::json; }
 
-    static constexpr int wavBlockSize{256};
-    float wavBlock[2][wavBlockSize]{};
-    std::size_t wavBlockPosition{0};
-
     uint64_t playbackPos{0};
 
     enum CreateState
@@ -213,7 +209,13 @@ struct SampleCreatorModule : virtual rack::Module,
     };
 
     std::vector<RenderJob> renderJobs;
-    int64_t currentJobIndex{-1};
+    int64_t currentJobIndex{-1}; // don't need to be atomic since only used on audio thread
+
+    static constexpr int ioSampleBlockSize{16};
+    static constexpr int ioSampleBlocksAvailable{8192};
+    float ioBlocks[ioSampleBlocksAvailable][ioSampleBlockSize][2];
+    std::atomic<int> ioWriteBlock{0},
+        ioWritePosition{0}; // don't need to be atomic since only used on audio thread
 
     std::unique_ptr<std::thread> renderThread;
     std::atomic<bool> keepRunning{true};
@@ -228,7 +230,7 @@ struct SampleCreatorModule : virtual rack::Module,
         } message;
 
         int64_t data;
-        float smp0{0.f}, smp1{0.f};
+        int64_t data2;
     };
     sst::cpputils::SimpleRingBuffer<RenderThreadCommand, 4096 * 16> renderThreadCommands;
     void renderThreadProcess()
@@ -243,15 +245,14 @@ struct SampleCreatorModule : virtual rack::Module,
                     switch (oc->message)
                     {
                     case RenderThreadCommand::NEW_NOTE:
-                        renderThreadNewNote(oc->data, oc->smp0);
+                        renderThreadNewNote(oc->data, oc->data2);
                         break;
                     case RenderThreadCommand::CLOSE_FILE:
                         riffWavWriter.closeFile();
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
-                        float d[2]{oc->smp0, oc->smp1};
-                        riffWavWriter.pushSamples(d);
+                        renderThreadWriteBlock(oc->data);
                     }
                     break;
                     }
@@ -284,6 +285,24 @@ struct SampleCreatorModule : virtual rack::Module,
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
                                          currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
             riffWavWriter.startDataChunk();
+        }
+    }
+
+    void renderThreadWriteBlock(int whichBlock)
+    {
+        auto *data = &(ioBlocks[whichBlock][0][0]);
+        if (riffWavWriter.nChannels == 2)
+        {
+            riffWavWriter.pushInterleavedBlock(data, ioSampleBlockSize * 2);
+        }
+        if (riffWavWriter.nChannels == 1)
+        {
+            float md[ioSampleBlockSize];
+            for (int i = 0; i < ioSampleBlockSize; ++i)
+            {
+                md[i] = data[i * 2];
+            }
+            riffWavWriter.pushInterleavedBlock(data, ioSampleBlockSize);
         }
     }
 
@@ -348,7 +367,6 @@ struct SampleCreatorModule : virtual rack::Module,
             startOperating = false;
             createState = NEW_NOTE;
             currentJobIndex = -1;
-            wavBlockPosition = 0;
 
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
@@ -377,8 +395,10 @@ struct SampleCreatorModule : virtual rack::Module,
             gateSamples = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
             createState = GATED_RECORD;
 
-            renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::NEW_NOTE,
-                                                          currentJobIndex, args.sampleRate});
+            renderThreadCommands.push(RenderThreadCommand{
+                RenderThreadCommand::NEW_NOTE, currentJobIndex, (int64_t)args.sampleRate});
+            ioWriteBlock = (ioWriteBlock + 1) & (ioSampleBlocksAvailable - 1);
+            ioWritePosition = 0;
         }
 
         auto &currentJob = renderJobs[currentJobIndex];
@@ -448,16 +468,18 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (createState != SPINDOWN_BUFFER)
         {
-            float d[2];
-            d[0] = inputs[INPUT_L].getVoltage() / 5.f;
-            d[1] = inputs[INPUT_R].getVoltage() / 5.f;
+            auto &f2 = ioBlocks[ioWriteBlock][ioWritePosition];
+            f2[0] = inputs[INPUT_L].getVoltage() / 5.f;
+            f2[1] = inputs[INPUT_R].getVoltage() / 5.f;
 
+            ioWritePosition = (ioWritePosition + 1) & (ioSampleBlockSize - 1);
             // Insanely inefficient. We need to block this into a better chunk and send a chunk
             // index And when we do that we can shrink the queue again
-            if (!testMode)
+            if (ioWritePosition == 0)
             {
                 renderThreadCommands.push(
-                    RenderThreadCommand{RenderThreadCommand::PUSH_SAMPLES, 0, d[0], d[1]});
+                    RenderThreadCommand{RenderThreadCommand::PUSH_SAMPLES, ioWriteBlock});
+                ioWriteBlock = (ioWriteBlock + 1) & (ioSampleBlocksAvailable - 1);
             }
         }
 

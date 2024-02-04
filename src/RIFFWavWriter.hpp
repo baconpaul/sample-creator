@@ -82,7 +82,13 @@ struct RIFFWavWriter
     void pushSamples(float d[2])
     {
         elementsWritten += fwrite(d, 1, nChannels * sizeof(float), outf);
-        dataLen += 8;
+        dataLen += nChannels * sizeof(float);
+    }
+
+    void pushInterleavedBlock(float *d, size_t nSamples)
+    {
+        elementsWritten += fwrite(d, 1, nSamples * sizeof(float), outf);
+        dataLen += nSamples * sizeof(float);
     }
 
     void pushc4(char a, char b, char c, char d)

@@ -2,8 +2,6 @@ Nothing to see here.
 
 Big swaths of work until there is though
 
-- Audio Thread and Render Thread
-  - Block out the writes so that you don't have as many messages
 - Format Support
   - Is the inst block correct? Endpoint check etc
   - SFZ file support
