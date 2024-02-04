@@ -21,6 +21,7 @@
 #include <random>
 #include <chrono>
 #include <thread>
+#include <fstream>
 
 #include <rack.hpp>
 
@@ -189,6 +190,7 @@ struct SampleCreatorModule : virtual rack::Module,
     fs::path currentSampleDir{};
 
     riffwav::RIFFWavWriter riffWavWriter;
+    std::ofstream sfzFile;
 
     std::atomic<bool> testMode{false};
     std::atomic<bool> startOperating{false};
@@ -205,6 +207,7 @@ struct SampleCreatorModule : virtual rack::Module,
         int midiNote, noteFrom, noteTo;
         int velocity{90}, velFrom, velTo;
         int roundRobinIndex{0};
+        int roundRobinOutOf{1};
         float rrRand[2];
     };
 
@@ -224,13 +227,15 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         enum Message
         {
+            START_RENDER,
+            END_RENDER,
             NEW_NOTE, // data is a job index
             CLOSE_FILE,
             PUSH_SAMPLES // terrible implementation right now
         } message;
 
-        int64_t data;
-        int64_t data2;
+        int64_t data{0};
+        int64_t data2{0};
     };
     sst::cpputils::SimpleRingBuffer<RenderThreadCommand, 4096 * 16> renderThreadCommands;
     void renderThreadProcess()
@@ -244,6 +249,27 @@ struct SampleCreatorModule : virtual rack::Module,
                 {
                     switch (oc->message)
                     {
+                    case RenderThreadCommand::START_RENDER:
+                    {
+                        if (!testMode)
+                        {
+                            auto fn = currentSampleDir / "sample.sfz";
+                            sfzFile = std::ofstream(fn);
+                            sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
+                        }
+                    }
+                    break;
+                    case RenderThreadCommand::END_RENDER:
+                    {
+                        if (!testMode)
+                        {
+                            if (sfzFile.is_open())
+                            {
+                                sfzFile.close();
+                            }
+                        }
+                    }
+                    break;
                     case RenderThreadCommand::NEW_NOTE:
                         renderThreadNewNote(oc->data, oc->data2);
                         break;
@@ -285,11 +311,24 @@ struct SampleCreatorModule : virtual rack::Module,
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
                                          currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
             riffWavWriter.startDataChunk();
+
+            if (currentJob.roundRobinIndex == 0)
+            {
+                sfzFile << "\n<group> lokey=" << currentJob.noteFrom
+                        << " hikey=" << currentJob.noteTo
+                        << " pitch_keycenter=" << currentJob.midiNote
+                        << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo
+                        << " seq_length=" << currentJob.roundRobinOutOf << "\n";
+            }
+            sfzFile << "<region>seq_position=" << currentJob.roundRobinIndex + 1 << " sample=" << bn
+                    << "\n";
         }
     }
 
     void renderThreadWriteBlock(int whichBlock)
     {
+        if (testMode)
+            return;
         auto *data = &(ioBlocks[whichBlock][0][0]);
         if (riffWavWriter.nChannels == 2)
         {
@@ -350,6 +389,7 @@ struct SampleCreatorModule : virtual rack::Module,
                 {
                     auto rj = vrj;
                     rj.roundRobinIndex = rr;
+                    rj.roundRobinOutOf = numRR;
                     rj.rrRand[0] = uniReal(reng) * 10.f;
                     rj.rrRand[1] = uniReal(reng) * 10.f - 5.f;
                     onto.push_back(rj);
@@ -377,6 +417,7 @@ struct SampleCreatorModule : virtual rack::Module,
             }
 
             populateRenderJobs(renderJobs);
+            renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::START_RENDER});
             pushMessage(std::string("Generated render jobs: " + std::to_string(renderJobs.size()) +
                                     " renders"));
         }
@@ -485,9 +526,11 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
         {
-            if (currentJobIndex == renderJobs.size() - 1)
+            if ((size_t)currentJobIndex == renderJobs.size() - 1)
             {
                 createState = INACTIVE;
+                renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::START_RENDER});
+
                 pushMessage("Render Complete");
             }
             else
