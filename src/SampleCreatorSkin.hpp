@@ -14,6 +14,8 @@
 #include "rack.hpp"
 #include <unordered_set>
 
+#include "ui/TextField.hpp"
+
 namespace baconpaul::samplecreator
 {
 struct SampleCreatorSkin

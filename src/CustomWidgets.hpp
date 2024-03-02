@@ -146,7 +146,7 @@ using InPortLabel = SCLabel<&SampleCreatorSkin::panelInputText, 11>;
 using OutPortLabel = SCLabel<&SampleCreatorSkin::panelOutputText, 11>;
 using PanelLabel = SCLabel<&SampleCreatorSkin::labeLText, 12, NVG_ALIGN_RIGHT>;
 
-struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
+struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
     rack::Module *module{nullptr};
@@ -168,17 +168,23 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
         r->box.size = rack::Vec(width, ht);
         r->box.pos = ctrLeft;
         r->box.pos.y -= ht / 2;
+        /*
+                r->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+                    rack::Vec(0, 0), r->box.size, [r](auto *a) { r->drawParam(a); });
+                r->bdw->dirty = true;
+                r->addChild(r->bdw);
 
-        r->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
-            rack::Vec(0, 0), r->box.size, [r](auto *a) { r->drawParam(a); });
-        r->bdw->dirty = true;
-        r->addChild(r->bdw);
+                */
 
         return r;
     }
 
-    void drawParam(NVGcontext *vg)
+    double blinkTime{0.0};
+    double blinkOn = true;
+    void draw(const DrawArgs &args) override
     {
+        auto vg = args.vg;
+
         nvgBeginPath(vg);
         nvgFillColor(vg, nvgRGB(255, 0, 0));
         nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
@@ -186,7 +192,12 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
         nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
         nvgFill(vg);
         nvgStroke(vg);
+    }
 
+    void drawLayer(const DrawArgs &args, int layer) override
+    {
+        if (layer != 1)
+            return;
         if (!module)
         {
             return;
@@ -197,7 +208,8 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
             return;
         }
 
-        auto v = pq->getDisplayValueString();
+        auto vg = args.vg;
+        auto v = getText();
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
         nvgBeginPath(vg);
@@ -207,15 +219,74 @@ struct SCPanelParamDisplay : rack::Widget, SampleCreatorSkin::Client
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
         nvgText(vg, 3, box.size.y * 0.5, v.c_str(), nullptr);
+
+        if (APP->event->selectedWidget == this)
+        {
+            int begin = std::min(cursor, selection);
+            int end = std::max(cursor, selection);
+            if (begin != end)
+            {
+                float bounds[4];
+                auto css = v.substr(0, begin);
+                nvgTextBounds(vg, 3, box.size.y * 0.5, css.c_str(), nullptr, bounds);
+                float selStart = bounds[2];
+
+                css = v.substr(0, end);
+                nvgTextBounds(vg, 3, box.size.y * 0.5, css.c_str(), nullptr, bounds);
+                float selEnd = bounds[2];
+
+                auto c = sampleCreatorSkin.paramDisplayText();
+                c.a = 0.2;
+                nvgBeginPath(vg);
+                nvgFillColor(vg, c);
+                nvgRect(vg, selStart, 3, (selEnd - selStart), box.size.y - 6);
+                nvgFill(vg);
+            }
+
+            if (blinkOn)
+            {
+                float bounds[4];
+                auto css = v.substr(0, cursor);
+                auto w = nvgTextBounds(vg, 3, box.size.y * 0.5, css.c_str(), nullptr, bounds);
+                auto cpos = bounds[2];
+                nvgBeginPath(vg);
+                nvgRect(vg, cpos, 3, 1, box.size.y - 6);
+                nvgFillColor(vg, sampleCreatorSkin.paramDisplayText());
+
+                nvgFill(vg);
+            }
+            auto tm = rack::system::getTime();
+            if (tm - blinkTime > 0.75)
+            {
+                blinkTime = tm;
+                blinkOn = !blinkOn;
+            }
+        }
     }
 
+    void onAction(const ActionEvent &e) override
+    {
+        if (!module)
+            return;
+        auto pq = module->getParamQuantity(paramId);
+        if (!pq)
+            return;
+
+        pq->setDisplayValueString(getText());
+        e.consume(this);
+        Widget::onAction(e);
+    }
     void step() override
     {
-        if (obs->isStale())
+        if (module)
         {
-            bdw->dirty = true;
+            if (obs->isStale())
+            {
+                setText(obs->val);
+                // bdw->dirty = true;
+            }
         }
-        rack::Widget::step();
+        rack::ui::TextField::step();
     }
     void onSkinChanged() override { bdw->dirty = true; }
 };
