@@ -366,7 +366,7 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
 
 template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCreatorSkin::Client
 {
-    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
     bool stripMenuTypein{false};
     PixelKnob()
     {
@@ -378,7 +378,11 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
 
         bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), box.size, [this](auto vg) { drawKnob(vg); });
+        bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), box.size, [this](auto vg) { drawLayer(vg); });
+
         addChild(bdw);
+        addChild(bdwLayer);
     }
 
     void drawKnob(NVGcontext *vg)
@@ -447,6 +451,45 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         nvgFill(vg);
     }
 
+    void drawLayer(NVGcontext *vg)
+    {
+        float radius = px * 0.48;
+
+        auto pq = getParamQuantity();
+        if (!pq)
+            return;
+
+        nvgBeginPath(vg);
+        float angle = rack::math::rescale(pq->getValue(), pq->getMinValue(), pq->getMaxValue(),
+                                          minAngle, maxAngle);
+        float startAngle = minAngle;
+        if (bipolar)
+            startAngle = 0;
+
+        auto valueFill = sampleCreatorSkin.knobValueFill();
+
+        nvgBeginPath(vg);
+        nvgArc(vg, box.size.x * 0.5, box.size.y * 0.5, radius, startAngle - M_PI_2, angle - M_PI_2,
+               startAngle < angle ? NVG_CW : NVG_CCW);
+        nvgStrokeWidth(vg, 1);
+        nvgStrokeColor(vg, valueFill);
+        nvgLineCap(vg, NVG_ROUND);
+        nvgStroke(vg);
+
+        auto ox = std::sin(angle) * radius + box.size.x / 2;
+        auto oy = box.size.y - (std::cos(angle) * radius + box.size.y / 2);
+
+        auto ix = std::sin(angle) * radius * 0.4 + box.size.x / 2;
+        auto iy = box.size.y - (std::cos(angle) * radius * 0.4 + box.size.y / 2);
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, ox, oy);
+        nvgLineTo(vg, ix, iy);
+        nvgStrokeColor(vg, valueFill);
+        nvgStrokeWidth(vg, 1);
+        nvgStroke(vg);
+    }
+
     float lastVal{0.f};
     void step() override
     {
@@ -461,12 +504,19 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         }
 
         if (bdw && dirty)
+        {
             bdw->dirty = dirty;
+            bdwLayer->dirty = dirty;
+        }
 
         rack::Widget::step();
     }
 
-    void onSkinChanged() override { bdw->dirty = true; }
+    void onSkinChanged() override
+    {
+        bdw->dirty = true;
+        bdwLayer->dirty = true;
+    }
 
     void appendContextMenu(rack::Menu *menu) override
     {

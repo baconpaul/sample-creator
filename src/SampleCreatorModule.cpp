@@ -25,7 +25,7 @@ namespace baconpaul::samplecreator
 
 struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
 {
-    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
 
     static constexpr int linesz{9};
     SampleCreatorModule *module{nullptr};
@@ -40,6 +40,11 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
         res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), size, [res](auto a) { res->drawLog(a); });
         res->addChild(res->bdw);
+
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawLayer(vg); });
+        res->addChild(res->bdwLayer);
+
         return res;
     }
 
@@ -51,7 +56,10 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
         nvgRect(vg, 0, 0, box.size.x, box.size.y);
         nvgFill(vg);
         nvgStroke(vg);
+    }
 
+    void drawLayer(NVGcontext *vg)
+    {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
         float x = 2, y = 2;
@@ -79,6 +87,7 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
                     msgDeq.pop_front();
 
                 bdw->dirty = true;
+                bdwLayer->dirty = true;
             }
         }
 
@@ -88,7 +97,13 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
     void onSkinChanged() override
     {
         if (bdw)
+        {
             bdw->dirty = true;
+        }
+        if (bdwLayer)
+        {
+            bdwLayer->dirty = true;
+        }
     }
 };
 

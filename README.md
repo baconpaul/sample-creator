@@ -14,7 +14,6 @@ Big swaths of work until there is though
   - Note param quantity inverts from note names too
   - Recording Status
   - An actual design! Lets hope Steve bites :)
-  - Layer Draws
 - Important Details
   - Any error handling at all in the RIFF writer 
 - Engine / Rendering
