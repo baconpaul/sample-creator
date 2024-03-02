@@ -283,7 +283,9 @@ struct SampleCreatorModule : virtual rack::Module,
                     {
                         if (!testMode)
                         {
-                            auto fn = currentSampleDir / "sample.sfz";
+                            auto bn = currentSampleDir.filename().replace_extension();
+                            auto fn = (currentSampleDir / bn.u8string()).replace_extension("sfz");
+                            pushMessage("Creating '" + fn.u8string() + "'");
                             sfzFile = std::ofstream(fn);
                             sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
                             sfzFile << "<global>\n" << std::flush;

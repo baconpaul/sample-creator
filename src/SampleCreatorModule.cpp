@@ -343,6 +343,11 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             pt = fs::path{rack::asset::userDir} / "SampleCreator";
             fs::create_directories(pt);
         }
+        else
+        {
+            // Last time I was in "MySamples/Foo" and now I want to select somethign in MySamples
+            pt = pt.parent_path();
+        }
 
         char *path = osdialog_file(OSDIALOG_OPEN_DIR, pt.u8string().c_str(), "", NULL);
         if (path)
