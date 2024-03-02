@@ -139,7 +139,11 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
         }
     }
 
-    void onSkinChanged() override { bdw->dirty = true; }
+    void onSkinChanged() override
+    {
+        if (bdw)
+            bdw->dirty = true;
+    }
 };
 
 using InPortLabel = SCLabel<&SampleCreatorSkin::panelInputText, 11>;
@@ -288,7 +292,11 @@ struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
         }
         rack::ui::TextField::step();
     }
-    void onSkinChanged() override { bdw->dirty = true; }
+    void onSkinChanged() override
+    {
+        if (bdw)
+            bdw->dirty = true;
+    }
 };
 
 struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
@@ -361,7 +369,11 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
         hover = false;
         bdw->dirty = true;
     }
-    void onSkinChanged() override { bdw->dirty = true; }
+    void onSkinChanged() override
+    {
+        if (bdw)
+            bdw->dirty = true;
+    }
 };
 
 template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCreatorSkin::Client
@@ -514,8 +526,10 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
 
     void onSkinChanged() override
     {
-        bdw->dirty = true;
-        bdwLayer->dirty = true;
+        if (bdw)
+            bdw->dirty = true;
+        if (bdwLayer)
+            bdwLayer->dirty = true;
     }
 
     void appendContextMenu(rack::Menu *menu) override
