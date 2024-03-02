@@ -92,6 +92,55 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
     }
 };
 
+struct SampleCreatorVU : rack::Widget, SampleCreatorSkin::Client
+{
+    SampleCreatorModule *module{nullptr};
+    static SampleCreatorVU *create(const rack::Vec &pos, const rack::Vec &size,
+                                   SampleCreatorModule *m)
+    {
+        auto res = new SampleCreatorVU();
+        res->box.size = size;
+        res->box.pos = pos;
+        res->module = m;
+
+        return res;
+    }
+
+    void draw(const DrawArgs &args) override
+    {
+        auto vg = args.vg;
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgFill(vg);
+        nvgStroke(vg);
+    }
+
+    void drawLayer(const DrawArgs &args, int layer) override
+    {
+        if (!module)
+            return;
+        auto vg = args.vg;
+
+        float vl[2]{module->vuLevels[0], module->vuLevels[1]};
+        for (int i = 0; i < 2; ++i)
+        {
+            if (vl[i] < 1e-4)
+                continue;
+            vl[i] = vl[i] * vl[i] * vl[i];
+            vl[i] = std::clamp(vl[i], 0.f, 1.f);
+            nvgBeginPath(vg);
+            nvgFillColor(vg, sampleCreatorSkin.vuLevel());
+            nvgRect(vg, 1, 1 + i * box.size.y / 2, (box.size.x - 2) * vl[i],
+                    (box.size.y - 2) / 2 - 1);
+            nvgFill(vg);
+        }
+    }
+
+    void onSkinChanged() override {}
+};
+
 struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 {
     typedef SampleCreatorModule M;
@@ -227,6 +276,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         }
 
         auto lwp = 230;
+        auto vu =
+            SampleCreatorVU::create(rack::Vec(10, lwp - 30), rack::Vec(box.size.x - 20, 25), m);
+        addChild(vu);
         auto log = SampleCreatorLogWidget::create(
             rack::Vec(10, lwp), rack::Vec(box.size.x - 20, box.size.y - lwp - 65), m);
         addChild(log);

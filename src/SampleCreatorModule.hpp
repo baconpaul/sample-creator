@@ -196,6 +196,8 @@ struct SampleCreatorModule : virtual rack::Module,
     std::atomic<bool> startOperating{false};
     std::atomic<bool> stopImmediately{false};
 
+    std::array<std::atomic<float>, 2> vuLevels{0, 0};
+
     uint64_t gateSamples;
 
     static constexpr int silenceSamples{4096};
@@ -268,7 +270,7 @@ struct SampleCreatorModule : virtual rack::Module,
                             pushMessage("Closing SFZ File");
                             if (sfzFile.is_open())
                             {
-                                pushMessage("Which is open" );
+                                pushMessage("Which is open");
                                 sfzFile.close();
                             }
                         }
@@ -282,6 +284,7 @@ struct SampleCreatorModule : virtual rack::Module,
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
+                        updateVU(oc->data);
                         renderThreadWriteBlock(oc->data);
                     }
                     break;
@@ -298,8 +301,8 @@ struct SampleCreatorModule : virtual rack::Module,
         auto &currentJob = renderJobs[jobid];
         pushMessage(std::string("Starting note ") + std::to_string(currentJob.midiNote));
 
-        auto bn = std::string("sample") + "_note_" + std::to_string((int)currentJob.midiNote) + "_vel_" +
-                  std::to_string((int)currentJob.velocity) + "_rr_" +
+        auto bn = std::string("sample") + "_note_" + std::to_string((int)currentJob.midiNote) +
+                  "_vel_" + std::to_string((int)currentJob.velocity) + "_rr_" +
                   std::to_string((int)currentJob.roundRobinIndex) + ".wav";
         auto fn = currentSampleDir / bn;
         if (!testMode)
@@ -318,16 +321,16 @@ struct SampleCreatorModule : virtual rack::Module,
             if (currentJob.roundRobinIndex == 0)
             {
                 sfzFile << "\n<group> "
-                        << " seq_length=" << currentJob.roundRobinOutOf << "\n" << std::flush;
+                        << " seq_length=" << currentJob.roundRobinOutOf << "\n"
+                        << std::flush;
             }
 
             sfzFile << "<region>seq_position=" << (currentJob.roundRobinIndex + 1)
                     << " sample=" << fn.filename().u8string().c_str()
-                    << " lokey=" << currentJob.noteFrom
-                    << " hikey=" << currentJob.noteTo
-                    << " pitch_keycenter=" << currentJob.midiNote
-                    << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo
-                    << "\n" << std::flush;
+                    << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo
+                    << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
+                    << " hivel=" << currentJob.velTo << "\n"
+                    << std::flush;
         }
     }
 
@@ -426,6 +429,7 @@ struct SampleCreatorModule : virtual rack::Module,
             renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::START_RENDER});
             pushMessage(std::string("Generated render jobs: " + std::to_string(renderJobs.size()) +
                                     " renders"));
+            clearVU();
         }
 
         if (createState == INACTIVE)
@@ -460,6 +464,8 @@ struct SampleCreatorModule : virtual rack::Module,
         if (stopImmediately)
         {
             pushMessage("Stopping operation");
+            clearVU();
+
             if (!testMode && (createState == GATED_RECORD || createState == RELEASE_RECORD))
             {
                 renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, 0});
@@ -509,6 +515,7 @@ struct SampleCreatorModule : virtual rack::Module,
                         renderThreadCommands.push(
                             RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, 0});
                     }
+                    clearVU();
                 }
             }
         }
@@ -538,6 +545,7 @@ struct SampleCreatorModule : virtual rack::Module,
                 renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::END_RENDER});
 
                 pushMessage("Render Complete");
+                clearVU();
             }
             else
             {
@@ -546,6 +554,31 @@ struct SampleCreatorModule : virtual rack::Module,
         }
 
         playbackPos++;
+    }
+
+    void clearVU()
+    {
+        vuLevels[0] = 0.f;
+        vuLevels[1] = 0.f;
+    }
+
+    void updateVU(int64_t whichBlock)
+    {
+        auto &data = ioBlocks[whichBlock];
+        float vul[2];
+        vul[0] = vuLevels[0] * 0.9995;
+        vul[1] = vuLevels[1] * 0.9995;
+        for (int i = 0; i < ioSampleBlockSize; ++i)
+        {
+            auto fl = fabs(data[i][0]);
+            if (fl > vul[0])
+                vul[0] = fl;
+            auto fr = fabs(data[i][1]);
+            if (fr > vul[1])
+                vul[1] = fr;
+        }
+        vuLevels[0] = vul[0];
+        vuLevels[1] = vul[1];
     }
 };
 

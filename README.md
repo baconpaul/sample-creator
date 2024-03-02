@@ -5,10 +5,12 @@ Big swaths of work until there is though
 - Format Support
   - Is the inst block correct? Endpoint check etc
   - bws/presonus multisample xml
+- Changes
+  - RR vars can be UNI or BI per instance and have a distro uni or norm 
 - UI
   - Show the keyboard as a 'progress bar'
   - Value fields for notes gets typein support
-  - VU Meter / Recording Status
+  - Recording Status
   - An actual design! Lets hope Steve bites :)
 - Important Details
   - Any error handling at all in the RIFF writer 
