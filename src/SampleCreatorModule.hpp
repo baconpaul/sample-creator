@@ -49,7 +49,35 @@ struct MidiNoteParamQuantity : rack::ParamQuantity
         snprintf(res, 256, "%s%d (%d)", notes[nt].c_str(), oct, v);
         return std::string(res);
     }
-    void setDisplayValueString(std::string s) override { ParamQuantity::setDisplayValueString(s); }
+    void setDisplayValueString(std::string s) override
+    {
+        if ((s[0] >= 'A' && s[0] <= 'G') || (s[0] >= 'a' && s[0] <= 'g'))
+        {
+            int npos = 1;
+            float diff{0};
+            while (s[npos] == '#')
+            {
+                diff++;
+                npos++;
+            }
+            while (s[npos] == 'b')
+            {
+                diff--;
+                npos++;
+            }
+            auto oct = std::atoi(s.c_str() + npos);
+            std::map<char, int> n2t{{'C', 0}, {'D', 2}, {'E', 4}, {'F', 5},
+                                    {'G', 7}, {'A', 9}, {'B', 11}};
+            auto base = n2t.at(std::toupper(s[0]));
+
+            auto res = base + (oct + 1) * 12 + diff;
+            setImmediateValue(res);
+        }
+        else
+        {
+            rack::ParamQuantity::setDisplayValueString(s);
+        }
+    }
 };
 
 struct SampleCreatorModule : virtual rack::Module,
@@ -187,7 +215,7 @@ struct SampleCreatorModule : virtual rack::Module,
         SPINDOWN_BUFFER,
     } createState{INACTIVE};
 
-    fs::path currentSampleDir{};
+    fs::path currentSampleDir{}, currentSampleWavDir{};
 
     riffwav::RIFFWavWriter riffWavWriter;
     std::ofstream sfzFile;
@@ -304,7 +332,7 @@ struct SampleCreatorModule : virtual rack::Module,
         auto bn = std::string("sample") + "_note_" + std::to_string((int)currentJob.midiNote) +
                   "_vel_" + std::to_string((int)currentJob.velocity) + "_rr_" +
                   std::to_string((int)currentJob.roundRobinIndex) + ".wav";
-        auto fn = currentSampleDir / bn;
+        auto fn = currentSampleWavDir / bn;
         if (!testMode)
         {
             int nChannels = inputs[INPUT_R].isConnected() ? 2 : 1;
@@ -325,11 +353,10 @@ struct SampleCreatorModule : virtual rack::Module,
                         << std::flush;
             }
 
-            sfzFile << "<region>seq_position=" << (currentJob.roundRobinIndex + 1)
-                    << " sample=" << fn.filename().u8string().c_str()
-                    << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo
-                    << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
-                    << " hivel=" << currentJob.velTo << "\n"
+            sfzFile << "<region>seq_position=" << (currentJob.roundRobinIndex + 1) << " sample=wav/"
+                    << fn.filename().u8string().c_str() << " lokey=" << currentJob.noteFrom
+                    << " hikey=" << currentJob.noteTo << " pitch_keycenter=" << currentJob.midiNote
+                    << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo << "\n"
                     << std::flush;
         }
     }
@@ -419,9 +446,11 @@ struct SampleCreatorModule : virtual rack::Module,
 
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
+            currentSampleWavDir = currentSampleDir / "wav";
             if (!testMode)
             {
                 fs::create_directories(currentSampleDir);
+                fs::create_directories(currentSampleWavDir);
                 pushMessage("Writing to '" + currentSampleDir.u8string() + "'");
             }
 
