@@ -42,7 +42,7 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
         res->addChild(res->bdw);
 
         res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
-            rack::Vec(0, 0), size, [res](auto vg) { res->drawLayer(vg); });
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawValueLayer(vg); });
         res->addChild(res->bdwLayer);
 
         return res;
@@ -58,7 +58,7 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
         nvgStroke(vg);
     }
 
-    void drawLayer(NVGcontext *vg)
+    void drawValueLayer(NVGcontext *vg)
     {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 

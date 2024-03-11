@@ -391,7 +391,7 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), box.size, [this](auto vg) { drawKnob(vg); });
         bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
-            rack::Vec(0, 0), box.size, [this](auto vg) { drawLayer(vg); });
+            rack::Vec(0, 0), box.size, [this](auto vg) { drawValueLayer(vg); });
 
         addChild(bdw);
         addChild(bdwLayer);
@@ -463,7 +463,7 @@ template <int px, bool bipolar = false> struct PixelKnob : rack::Knob, SampleCre
         nvgFill(vg);
     }
 
-    void drawLayer(NVGcontext *vg)
+    void drawValueLayer(NVGcontext *vg)
     {
         float radius = px * 0.48;
 
