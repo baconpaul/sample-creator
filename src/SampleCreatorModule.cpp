@@ -472,7 +472,6 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
     void selectPath()
     {
-        auto ord = (1 <=> 2);
         auto scm = dynamic_cast<SampleCreatorModule *>(module);
         if (!scm)
             return;
@@ -629,10 +628,27 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
     void onSkinChanged() override { bg->dirty = true; }
 
+    float cacheParamVals[M::NUM_PARAMS]{-100000}; // make midi start note bad so the step fires
     void step() override
     {
         if (module)
         {
+            bool paramChanged = false;
+            for (const auto &invals :
+                 {M::MIDI_START_RANGE, M::MIDI_END_RANGE, M::MIDI_STEP_SIZE, M::NUM_VEL_LAYERS,
+                  M::NUM_ROUND_ROBINS, M::VELOCITY_STRATEGY})
+            {
+                if (cacheParamVals[invals] != module->getParamQuantity(invals)->getValue())
+                {
+                    paramChanged = true;
+                    cacheParamVals[invals] = module->getParamQuantity(invals)->getValue();
+                }
+            }
+
+            if (paramChanged)
+            {
+                std::cout << "Invalidating keyboard layout" << std::endl;
+            }
         }
 
         sampleCreatorSkin.step();
