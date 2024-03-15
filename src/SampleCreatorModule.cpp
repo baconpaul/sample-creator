@@ -130,15 +130,33 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         // Repaint
     }
 
+    void drawKeyboard(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgStroke(vg);
+
+        auto mks = box.size.x / 128.0;
+
+        for (int i = 0; i < 128; ++i)
+        {
+            auto k = i % 12;
+            auto bk = false;
+            if (k == 1 || k == 3 || k == 6 || k == 8 || k == 10)
+                bk = true;
+            nvgBeginPath(vg);
+            nvgFillColor(vg, bk ? nvgRGB(40, 40, 40) : nvgRGB(100, 100, 100));
+            nvgRect(vg, i * mks, 0, mks, box.size.y);
+            nvgFill(vg);
+        }
+    }
+
     void draw(const DrawArgs &args) override
     {
         auto vg = args.vg;
-        nvgBeginPath(vg);
-        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
-        nvgFillColor(vg, nvgRGB(0, 30, 0) /*sampleCreatorSkin.paramDisplayBG()*/);
-        nvgRect(vg, 0, 0, box.size.x, box.size.y);
-        nvgFill(vg);
-        nvgStroke(vg);
+
+        drawKeyboard(vg);
 
         auto mks = box.size.x / 128.0;
         auto vls = box.size.y / 128.0;
@@ -154,12 +172,14 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
             auto ye = (127 - j.velFrom) * vls;
 
             nvgBeginPath(vg);
-            nvgStrokeColor(vg, nvgRGB(255, 0, 0));
+            nvgStrokeColor(vg, nvgRGB(220, 220, 220));
+            nvgFillColor(vg, nvgRGBA(220, 220, 220, 100));
             nvgRect(vg, xs, ys, xe - xs, ye - ys);
+            nvgFill(vg);
             nvgStroke(vg);
 
             nvgBeginPath(vg);
-            nvgStrokeColor(vg, nvgRGB(0, 0, 255));
+            nvgStrokeColor(vg, nvgRGB(255, 255, 0));
             nvgEllipse(vg, mn, ve, 1, 1);
             nvgStroke(vg);
         }

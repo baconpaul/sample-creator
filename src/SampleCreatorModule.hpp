@@ -417,7 +417,7 @@ struct SampleCreatorModule : virtual rack::Module,
         for (int mn = midiStart + midiHalf; mn <= midiEnd; mn += midiStep)
         {
             auto nf = mn - midiHalf;
-            auto nt = mn + midiStep - 1 - (midiStep > 2);
+            auto nt = nf + midiStep;
             if (mn + midiStep > midiEnd)
                 nt = midiEnd;
 
