@@ -102,6 +102,9 @@ struct SampleCreatorSkin
     COL(panelOutputBorder, nvgRGB(90, 90, 100), nvgRGB(40, 40, 50));
     COL(panelOutputText, nvgRGB(190, 190, 200), nvgRGB(190, 190, 200));
 
+    COL(panelControlFill, nvgRGB(10, 10, 15), nvgRGB(60, 60, 70));
+    COL(panelControlBorder, nvgRGB(40, 40, 250), nvgRGB(40, 40, 50));
+
     COL(panelBrandText, nvgRGB(200, 200, 220), nvgRGB(0, 0, 0));
 
     COL(paramDisplayBorder, nvgRGB(120, 120, 120), nvgRGB(120, 120, 120));

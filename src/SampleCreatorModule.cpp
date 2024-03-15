@@ -19,6 +19,7 @@
 #include "RIFFWavWriter.hpp"
 
 #include "SampleCreatorModule.hpp"
+#include <compare>
 
 namespace baconpaul::samplecreator
 {
@@ -107,6 +108,35 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
     }
 };
 
+struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
+{
+    SampleCreatorModule *module{nullptr};
+
+    static SampleCreatorJobsKeyboard *create(const rack::Vec &pos, const rack::Vec &size,
+                                             SampleCreatorModule *m)
+    {
+        auto res = new SampleCreatorJobsKeyboard();
+        res->box.size = size;
+        res->box.pos = pos;
+        res->module = m;
+
+        return res;
+    }
+
+    void draw(const DrawArgs &args) override
+    {
+        auto vg = args.vg;
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, nvgRGB(0, 30, 0) /*sampleCreatorSkin.paramDisplayBG()*/);
+        nvgRect(vg, 0, 0, box.size.x, box.size.y);
+        nvgFill(vg);
+        nvgStroke(vg);
+    }
+
+    void onSkinChanged() override {}
+};
+
 struct SampleCreatorVU : rack::Widget, SampleCreatorSkin::Client
 {
     SampleCreatorModule *module{nullptr};
@@ -166,7 +196,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
     {
         sampleCreatorSkin.intialize();
         setModule(m);
-        box.size = rack::Vec(SCREW_WIDTH * 22, RACK_HEIGHT);
+        box.size = rack::Vec(SCREW_WIDTH * 30, RACK_HEIGHT);
+        setupPositions();
 
         bg = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(rack::Vec(0, 0), box.size,
                                                                   [this](auto vg) { drawBG(vg); });
@@ -182,7 +213,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             sOm->wrap();
 
             auto tw = new rack::widget::TransformWidget();
-            tw->box.pos = rack::Vec(100, box.size.y - 20);
+            tw->box.pos = rack::Vec(box.size.x * 0.5 - 65, box.size.y - 20);
             tw->scale(0.025);
             tw->addChild(sOm);
 
@@ -198,114 +229,216 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             sOm->wrap();
 
             auto tw = new rack::widget::TransformWidget();
-            tw->box.pos = rack::Vec(210, box.size.y - 15);
+            tw->box.pos = rack::Vec(box.size.x * 0.5 + 48, box.size.y - 15);
             tw->scale(0.35);
             tw->addChild(sOm);
 
             addChild(tw);
         }
 
-        int headerSize{38};
-
         // Input Elements
+        auto startFrom = [](auto &r) {
+            auto ps = r;
+            ps.pos.x += 18;
+            ps.pos.y += 14;
+            auto pl = ps;
+            pl.pos.y += 18;
+            return std::make_pair(pl, ps);
+        };
 
-        auto priorBSx = 10 * SCREW_WIDTH;
+        int portdX{34};
+
         {
-            auto q = RACK_HEIGHT - 42;
-            auto c1 = priorBSx * 0.25;
-            auto dc = priorBSx * 0.11;
-            auto c2 = priorBSx * 0.75;
-            auto inl = rack::createInputCentered<SampleCreatorPort>(rack::Vec(c1 - dc, q), module,
-                                                                    M::INPUT_L);
+            auto [pl, ps] = startFrom(inputRegion);
+
+            auto inl = rack::createInputCentered<SampleCreatorPort>(ps.pos, module, M::INPUT_L);
             inl->connectAsInputFromMixmaster = true;
             inl->mixMasterStereoCompanion = M::INPUT_R;
 
-            auto lab = InPortLabel ::createCentered(rack::Vec(c1 - dc, q + 17), 20, "L");
+            auto lab = InPortLabel ::createCentered(pl.pos, portdX, "L");
             addChild(lab);
 
-            auto inr = rack::createInputCentered<SampleCreatorPort>(rack::Vec(c1 + dc, q), module,
-                                                                    M::INPUT_R);
+            ps.pos.x += portdX;
+            pl.pos.x += portdX;
+
+            auto inr = rack::createInputCentered<SampleCreatorPort>(ps.pos, module, M::INPUT_R);
             inr->connectAsInputFromMixmaster = true;
             inr->mixMasterStereoCompanion = M::INPUT_L;
 
-            lab = InPortLabel::createCentered(rack::Vec(c1 + dc, q + 17), 20, "R");
+            lab = InPortLabel::createCentered(pl.pos, portdX, "R");
             addChild(lab);
 
-            lab = InPortLabel::createCentered(rack::Vec(c1, q + 17), 10, "IN");
+            pl.pos.x -= portdX / 2;
+            lab = InPortLabel::createCentered(pl.pos, portdX, "In");
             addChild(lab);
 
             addInput(inl);
             addInput(inr);
+
+            auto vu = SampleCreatorVU::create(
+                rack::Vec(ps.pos.x + portdX / 2, inputRegion.pos.y + 5),
+                rack::Vec(inputRegion.pos.x + inputRegion.size.x - ps.pos.x - 15 - 8,
+                          inputRegion.size.y - 23),
+                m);
+            addChild(vu);
+
+            pl.pos.x += portdX * 1.4;
+            lab = InPortLabel::createCentered(pl.pos, portdX, "Level");
+            addChild(lab);
         }
 
+        // outputs
         {
-            auto q = RACK_HEIGHT - 42;
-            auto c1 = priorBSx * 0.14 + priorBSx * 0.5;
+            auto [pl, ps] = startFrom(outputRegion);
 
             for (auto [o, l] : {
-                     std::make_pair(M::OUTPUT_VOCT, "V/OCT"),
-                     {M::OUTPUT_VELOCITY, "VEL"},
-                     {M::OUTPUT_GATE, "GATE"},
-                     {M::OUTPUT_RR_UNI, "RR UNI"},
-                     {M::OUTPUT_RR_BI, "RR BI"},
+                     std::make_pair(M::OUTPUT_VOCT, "V/Oct"),
+                     {M::OUTPUT_VELOCITY, "Vel"},
+                     {M::OUTPUT_GATE, "Gate"},
+                     {M::OUTPUT_RR_ONE, "RR 1"},
+                     {M::OUTPUT_RR_TWO, "RR 2"},
                  })
             {
-                auto ot =
-                    rack::createOutputCentered<SampleCreatorPort>(rack::Vec(c1, q), module, o);
-                addOutput(ot);
-
-                auto lab = OutPortLabel::createCentered(rack::Vec(c1, q + 17), priorBSx * 0.25, l);
+                auto outL = rack::createOutputCentered<SampleCreatorPort>(ps.pos, module, o);
+                auto lab = OutPortLabel ::createCentered(pl.pos, portdX, l);
+                addOutput(outL);
                 addChild(lab);
 
-                c1 += priorBSx * 0.25;
+                ps.pos.x += portdX;
+                pl.pos.x += portdX;
             }
+            auto rrRegion = outputRegion;
+            rrRegion.pos.y += 42;
+            rrRegion.size.y -= 42;
+
+            auto fh = rrRegion;
+            fh.size.x *= 0.5;
+
+            auto addRR = [&](auto l, auto p) {
+                auto lp = fh;
+                auto dp = fh;
+                lp.size.x = 25;
+                dp.pos.x += 25;
+                dp.size.x -= 25;
+                dp = dp.grow({-margin, -margin});
+                addChild(OutPortLabel::create(lp, l));
+                addChild(SCPanelDropDown::create(dp.pos, dp.size, m, p));
+                fh.pos.x += fh.size.x;
+            };
+
+            addRR("RR1", M::RR1_TYPE);
+            addRR("RR2", M::RR2_TYPE);
         }
 
-        // OK so start aying out the midi section
+        auto kb = SampleCreatorJobsKeyboard::create(
+            rack::Vec(margin, margin),
+            rack::Vec(box.size.x - 2 * margin, keyboardYEnd - 2 * margin), m);
+        addChild(kb);
+
+        auto rangeSubRegion = rangeRegion;
+        rangeSubRegion.size.y = rangeRegion.size.y * 0.2;
+
+        auto rangePos = [](auto &subr) {
+            auto fh = subr;
+            fh.size.x = subr.size.x * 0.5;
+            auto sh = subr;
+            sh.pos.x += subr.size.x * 0.5;
+            sh.size.x -= subr.size.x * 0.5;
+
+            auto lh = 12;
+            auto fhl = fh;
+            auto fhw = fh;
+            fhl.size.y = lh;
+            fhw.pos.y += lh;
+            fhw.size.y -= lh;
+
+            auto shl = sh;
+            auto shw = sh;
+            shl.size.y = lh;
+            shw.pos.y += lh;
+            shw.size.y -= lh;
+
+            return std::make_tuple(fhl, fhw.shrink({3, 3}), shl, shw.shrink({3, 3}));
+        };
+
+        auto pWithK = [this](const auto &rect, int id) {
+            auto kctr = rect.pos;
+            kctr.x += rect.size.y * 0.5;
+            kctr.y += rect.size.y * 0.5;
+            addParam(rack::createParamCentered<PixelKnob<16>>(kctr, module, id));
+            auto bctr = rect;
+            bctr.pos.x += 20;
+            bctr.size.x -= 20;
+            addChild(SCPanelParamDisplay::create(bctr, module, id));
+        };
+
         {
-            auto x = 10;
-            auto y = 60;
-            int idx = 0;
-            for (auto [o, l] : {std::make_pair(M::MIDI_START_RANGE, "Start Note"),
-                                {M::MIDI_END_RANGE, "End Note"},
-                                {M::MIDI_STEP_SIZE, "Step"},
-                                {M::NUM_VEL_LAYERS, "Vel Layers"},
-                                {M::NUM_ROUND_ROBINS, "Rnd Robins"},
-                                {M::GATE_TIME, "Gate Time"}})
-            {
-                auto lw = PanelLabel::createCentered(rack::Vec(x + 30, y), 60, l);
-                addChild(lw);
-                auto k = rack::createParamCentered<PixelKnob<20>>(rack::Vec(x + 75, y), module, o);
-                addChild(k);
-                auto d = SCPanelParamDisplay::create(rack::Vec(x + 95, y), 50, module, o);
-                addChild(d);
+            auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
+            rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-                y += 28;
-                idx++;
-                if (idx == 3)
-                {
-                    y = 60;
-                    x = 10 + 95 + 50 + 5;
-                }
-            }
+            addChild(OutPortLabel::create(fl, "Start"));
+            pWithK(fw, M::MIDI_START_RANGE);
+
+            addChild(OutPortLabel::create(sl, "End"));
+            pWithK(sw, M::MIDI_END_RANGE);
         }
 
-        auto lwp = 230;
-        auto vu =
-            SampleCreatorVU::create(rack::Vec(10, lwp - 30), rack::Vec(box.size.x - 20, 25), m);
-        addChild(vu);
-        auto log = SampleCreatorLogWidget::create(
-            rack::Vec(10, lwp), rack::Vec(box.size.x - 20, box.size.y - lwp - 65), m);
+        {
+            auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
+            rangeSubRegion.pos.y += rangeSubRegion.size.y;
+
+            addChild(OutPortLabel::create(fl, "Gate Time"));
+            pWithK(fw, M::GATE_TIME);
+
+            addChild(OutPortLabel::create(sl, "Release Mode"));
+            addChild(SCPanelDropDown::create(sw.pos, sw.size, module, M::REL_MODE));
+        }
+
+        {
+            auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
+            rangeSubRegion.pos.y += rangeSubRegion.size.y;
+
+            addChild(OutPortLabel::create(fl, "Step Size"));
+            pWithK(fw, M::MIDI_STEP_SIZE);
+
+            addChild(OutPortLabel::create(sl, "Round Robin"));
+            pWithK(sw, M::NUM_ROUND_ROBINS);
+        }
+
+        {
+            auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
+            rangeSubRegion.pos.y += rangeSubRegion.size.y;
+
+            addChild(OutPortLabel::create(fl, "Vel Layers"));
+            pWithK(fw, M::NUM_VEL_LAYERS);
+
+            addChild(OutPortLabel::create(sl, "Vel Strategy"));
+            addChild(SCPanelDropDown::create(sw.pos, sw.size, module, M::VELOCITY_STRATEGY));
+        }
+
+        {
+            auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
+            rangeSubRegion.pos.y += rangeSubRegion.size.y;
+
+            addChild(OutPortLabel::create(fl, "Latency"));
+            pWithK(fw, M::LATENCY_COMPENSATION);
+
+            addChild(OutPortLabel::create(sl, "Polyphony"));
+            pWithK(sw, M::POLYPHONY);
+        }
+
+        auto log = SampleCreatorLogWidget::create(logRegion.pos, logRegion.size, m);
         addChild(log);
 
         {
-            auto x = 10;
-            auto y = 10;
+            auto rg = statusRegion;
+            rg.size.x = rg.size.y;
 
-            auto add = [&x, &y, this](auto lab, auto onc) {
-                auto bt = SCPanelPushButton::create(rack::Vec(x, y), rack::Vec(60, 18), lab, onc);
-                x += 63;
+            auto add = [&rg, this](auto lab, auto onc) {
+                auto ug = rg.shrink({margin, margin});
+                auto bt = SCPanelPushButton::create(ug.pos, ug.size, lab, onc);
                 addChild(bt);
+                rg.pos.x += rg.size.x;
             };
 
             add("Test", [m]() {
@@ -325,7 +458,13 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 if (m)
                     m->stopImmediately = true;
             });
-            add("Set Path", [this]() { selectPath(); });
+        }
+
+        {
+            auto ug = pathRegion.shrink({margin, margin});
+            auto bt =
+                SCPanelPushButton::create(ug.pos, ug.size, "Set Path", [this]() { selectPath(); });
+            addChild(bt);
         }
     }
 
@@ -333,6 +472,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
     void selectPath()
     {
+        auto ord = (1 <=> 2);
         auto scm = dynamic_cast<SampleCreatorModule *>(module);
         if (!scm)
             return;
@@ -359,17 +499,50 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
     void appendContextMenu(rack::Menu *menu) override {}
 
+    int footerHeight{18};
+    int keyboardYEnd{0}, controlsYEnd{0};
+    int controlsXSplit{0};
+    float rectCorner{2};
+    float margin{1.4};
+
+    rack::Rect inputRegion, outputRegion, rangeRegion, logRegion, statusRegion, pathRegion;
+
+    void setupPositions()
+    {
+        auto regionHeight = box.size.y - footerHeight;
+
+        keyboardYEnd = regionHeight * 0.2;
+        controlsYEnd = regionHeight * 0.71;
+        controlsXSplit = box.size.x * 0.61;
+
+        auto inpHeight = regionHeight * 0.115;
+        inputRegion =
+            rack::Rect(controlsXSplit, controlsYEnd, box.size.x - controlsXSplit, inpHeight)
+                .grow({-margin, -margin});
+        outputRegion =
+            rack::Rect(controlsXSplit, controlsYEnd + inpHeight, box.size.x - controlsXSplit,
+                       regionHeight - controlsYEnd - inpHeight)
+                .grow({-margin, -margin});
+        rangeRegion = rack::Rect(controlsXSplit, keyboardYEnd, box.size.x - controlsXSplit,
+                                 controlsYEnd - keyboardYEnd)
+                          .grow({-margin, -margin});
+        logRegion = rack::Rect(0, regionHeight * 0.6, controlsXSplit, regionHeight * 0.4)
+                        .grow({-margin, -margin});
+        statusRegion = rack::Rect(0, keyboardYEnd, controlsXSplit, regionHeight * 0.15)
+                           .grow({-margin, -margin});
+        pathRegion = statusRegion;
+        pathRegion.pos.y += pathRegion.size.y;
+    }
+
     void drawBG(NVGcontext *vg)
     {
-        auto cutPoint{58};
-
         // Main Gradient Background
         nvgBeginPath(vg);
-        nvgFillPaint(vg, nvgLinearGradient(vg, 0, 50, 0, box.size.y - cutPoint,
+        nvgFillPaint(vg, nvgLinearGradient(vg, 0, 50, 0, box.size.y - footerHeight,
                                            sampleCreatorSkin.panelGradientStart(),
                                            sampleCreatorSkin.panelGradientEnd()));
 
-        nvgRect(vg, 0, 0, box.size.x, box.size.y - cutPoint);
+        nvgRect(vg, 0, 0, box.size.x, box.size.y - footerHeight);
         nvgFill(vg);
         nvgStroke(vg);
 
@@ -378,10 +551,49 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         nvgFillColor(vg, sampleCreatorSkin.panelBottomRegion());
         nvgStrokeColor(vg, sampleCreatorSkin.panelBottomStroke());
         nvgStrokeWidth(vg, 0.5);
-        nvgRect(vg, 0, box.size.y - cutPoint, box.size.x, cutPoint);
+        nvgRect(vg, 0, box.size.y - footerHeight, box.size.x, footerHeight);
         nvgFill(vg);
         nvgStroke(vg);
 
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPathMedium)->handle;
+        nvgBeginPath(vg);
+        nvgFillColor(vg, sampleCreatorSkin.panelBrandText());
+        nvgTextAlign(vg, NVG_ALIGN_BOTTOM | NVG_ALIGN_CENTER);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 14);
+        nvgText(vg, box.size.x * 0.5, box.size.y - 2, "SampleCreator", nullptr);
+
+        // Input region
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.panelInputBorder());
+        nvgFillColor(vg, sampleCreatorSkin.panelInputFill());
+        nvgStrokeWidth(vg, 1);
+        nvgRoundedRect(vg, inputRegion.pos.x, inputRegion.pos.y, inputRegion.size.x,
+                       inputRegion.size.y, rectCorner);
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        // Output region
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.panelOutputBorder());
+        nvgFillColor(vg, sampleCreatorSkin.panelOutputFill());
+        nvgStrokeWidth(vg, 1);
+        nvgRoundedRect(vg, outputRegion.pos.x, outputRegion.pos.y, outputRegion.size.x,
+                       outputRegion.size.y, rectCorner);
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        // Control Region
+        nvgBeginPath(vg);
+        nvgStrokeColor(vg, sampleCreatorSkin.panelControlBorder());
+        nvgFillColor(vg, sampleCreatorSkin.panelControlFill());
+        nvgStrokeWidth(vg, 1);
+        nvgRoundedRect(vg, rangeRegion.pos.x, rangeRegion.pos.y, rangeRegion.size.x,
+                       rangeRegion.size.y, rectCorner);
+        nvgFill(vg);
+        nvgStroke(vg);
+
+#if 0
         // Input region
         auto priorBSx = 10 * SCREW_WIDTH;
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
@@ -406,20 +618,13 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         nvgFill(vg);
         nvgStroke(vg);
 
-        fid = APP->window->loadFont(sampleCreatorSkin.fontPathMedium)->handle;
-        nvgBeginPath(vg);
-        nvgFillColor(vg, sampleCreatorSkin.panelBrandText());
-        nvgTextAlign(vg, NVG_ALIGN_BOTTOM | NVG_ALIGN_CENTER);
-        nvgFontFaceId(vg, fid);
-        nvgFontSize(vg, 14);
-        nvgText(vg, box.size.x * 0.5, box.size.y - 2, "SampleCreator", nullptr);
-
         // Outline the module
         nvgBeginPath(vg);
         nvgStrokeColor(vg, sampleCreatorSkin.moduleOutline());
         nvgStrokeWidth(vg, 1);
         nvgRect(vg, 0, 0, box.size.x, box.size.y);
         nvgStroke(vg);
+#endif
     }
 
     void onSkinChanged() override { bg->dirty = true; }

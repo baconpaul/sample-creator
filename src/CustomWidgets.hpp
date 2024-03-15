@@ -76,11 +76,13 @@ struct PQStringObserver
     }
 };
 
-template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt, int halign = NVG_ALIGN_CENTER>
+template <NVGcolor (SampleCreatorSkin::*txtcol)(), int pt>
 struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
     std::string label;
+
+    int halign = NVG_ALIGN_CENTER;
 
     static SCLabel *createCentered(const rack::Vec &ctr, int w, const std::string &label)
     {
@@ -94,6 +96,33 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
         r->label = label;
 
         r->initBDW();
+
+        return r;
+    }
+
+    static SCLabel *create(const rack::Rect &inRect, const std::string &label)
+    {
+        auto r = new SCLabel();
+        r->box = inRect;
+
+        r->label = label;
+
+        r->initBDW();
+        r->halign = NVG_ALIGN_CENTER;
+
+        return r;
+    }
+
+    static SCLabel *create(const rack::Vec &ctr, int w, const std::string &label)
+    {
+        auto r = new SCLabel();
+        r->box.pos = ctr;
+        r->box.size = rack::Vec(w, pt);
+
+        r->label = label;
+
+        r->initBDW();
+        r->halign = NVG_ALIGN_LEFT;
 
         return r;
     }
@@ -148,7 +177,6 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 
 using InPortLabel = SCLabel<&SampleCreatorSkin::panelInputText, 11>;
 using OutPortLabel = SCLabel<&SampleCreatorSkin::panelOutputText, 11>;
-using PanelLabel = SCLabel<&SampleCreatorSkin::labeLText, 12, NVG_ALIGN_RIGHT>;
 
 struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
 {
@@ -157,6 +185,21 @@ struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
     int paramId{0};
 
     std::unique_ptr<PQStringObserver> obs;
+
+    static SCPanelParamDisplay *create(const rack::Rect &inThis, rack::Module *m, int paramId)
+    {
+        auto ht = 18;
+        auto r = new SCPanelParamDisplay();
+
+        r->module = m;
+        r->paramId = paramId;
+
+        r->obs = std::make_unique<PQStringObserver>(m, paramId);
+
+        r->box = inThis;
+
+        return r;
+    }
 
     static SCPanelParamDisplay *create(const rack::Vec &ctrLeft, int width, rack::Module *m,
                                        int paramId)
@@ -172,13 +215,6 @@ struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
         r->box.size = rack::Vec(width, ht);
         r->box.pos = ctrLeft;
         r->box.pos.y -= ht / 2;
-        /*
-                r->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
-                    rack::Vec(0, 0), r->box.size, [r](auto *a) { r->drawParam(a); });
-                r->bdw->dirty = true;
-                r->addChild(r->bdw);
-
-                */
 
         return r;
     }
@@ -356,6 +392,78 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
                 onClick();
                 e.consume(this);
             }
+        }
+    }
+    void onHover(const HoverEvent &e) override { e.consume(this); }
+    void onEnter(const EnterEvent &e) override
+    {
+        hover = true;
+        bdw->dirty = true;
+    }
+    void onLeave(const LeaveEvent &e) override
+    {
+        hover = false;
+        bdw->dirty = true;
+    }
+    void onSkinChanged() override
+    {
+        if (bdw)
+            bdw->dirty = true;
+    }
+};
+
+struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+
+    std::string label;
+    std::function<void()> onClick{nullptr};
+    bool hover{false};
+
+    static SCPanelDropDown *create(const rack::Vec &pos, const rack::Vec &size, rack::Module *mod,
+                                   int pid)
+    {
+        auto res = new SCPanelDropDown();
+        res->box.pos = pos;
+        res->box.size = size;
+        res->module = mod;
+        res->paramId = pid;
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawDropdown(a); });
+        res->addChild(res->bdw);
+        return res;
+    }
+
+    void drawDropdown(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillPaint(
+            vg, nvgLinearGradient(vg, 0, 0, 0, box.size.y,
+                                  lighten(sampleCreatorSkin.pushButtonFill(), 1.4),
+                                  lighten(sampleCreatorSkin.pushButtonFill(), hover ? 1.2 : 1.0)));
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, hover ? sampleCreatorSkin.pushButtonHoverText()
+                               : sampleCreatorSkin.pushButtonText());
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 12);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+        nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+    }
+
+    void onButton(const ButtonEvent &e) override
+    {
+        if (e.action == GLFW_PRESS)
+        {
+            std::cout << "Show Menu" << std::endl;
         }
     }
     void onHover(const HoverEvent &e) override { e.consume(this); }

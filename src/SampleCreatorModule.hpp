@@ -93,6 +93,15 @@ struct SampleCreatorModule : virtual rack::Module,
         NUM_ROUND_ROBINS,
 
         GATE_TIME,
+        REL_MODE,
+
+        RR1_TYPE,
+        RR2_TYPE,
+
+        LATENCY_COMPENSATION,
+        POLYPHONY,
+
+        VELOCITY_STRATEGY,
 
         NUM_PARAMS
     };
@@ -113,8 +122,8 @@ struct SampleCreatorModule : virtual rack::Module,
         OUTPUT_GATE,
         OUTPUT_VELOCITY,
 
-        OUTPUT_RR_UNI,
-        OUTPUT_RR_BI,
+        OUTPUT_RR_ONE,
+        OUTPUT_RR_TWO,
 
         NUM_OUTPUTS
     };
@@ -135,8 +144,8 @@ struct SampleCreatorModule : virtual rack::Module,
         configOutput(OUTPUT_VOCT, "VOct Output");
         configOutput(OUTPUT_GATE, "Gate Output");
         configOutput(OUTPUT_VELOCITY, "Velocity Output");
-        configOutput(OUTPUT_RR_UNI, "Unipolar (0-10v) Uniform RR CV");
-        configOutput(OUTPUT_RR_BI, "Bipolar (+/-5v) Uniform RR CV");
+        configOutput(OUTPUT_RR_ONE, "RR CV One");
+        configOutput(OUTPUT_RR_TWO, "RR CV Two");
 
         auto p =
             configParam<MidiNoteParamQuantity>(MIDI_START_RANGE, 0, 127, 48, "MIDI Start Range");
@@ -159,6 +168,16 @@ struct SampleCreatorModule : virtual rack::Module,
         }
 
         configParam(GATE_TIME, 0.2, 16, 1, "Gate Time", "s");
+        configSwitch(REL_MODE, 0, 1, 0, "Release Mode", {"Until Silence", "Drone"});
+
+        configParam(LATENCY_COMPENSATION, 0, 512, 0, "Latency Compesnation", "Samples");
+        configParam(POLYPHONY, 1, 16, 1, "Polyphony", "Voices");
+        configSwitch(RR1_TYPE, 0, 3, 0, "RR1 Mode",
+                     {"10v Uni", "+/-5v Uni", "+10v 1/2 Normal", "+/-5v Normal", "RR Index 0-10"});
+        configSwitch(RR2_TYPE, 0, 3, 1, "RR2 Mode",
+                     {"10v Uni", "+/-5v Uni", "+10v 1/2 Normal", "+/-5v Normal", "RR Index 0-10"});
+        configSwitch(VELOCITY_STRATEGY, 0, 2, 1, "Velocity Strategy",
+                     {"Uniform", "Sqrt", "Square"});
 
         renderThread = std::make_unique<std::thread>([this]() { renderThreadProcess(); });
 
@@ -489,8 +508,8 @@ struct SampleCreatorModule : virtual rack::Module,
         outputs[OUTPUT_GATE].setVoltage((createState == GATED_RECORD) * 10.f);
         outputs[OUTPUT_VELOCITY].setVoltage(
             std::clamp((float)currentJob.velocity / 12.7f, 0.f, 10.f));
-        outputs[OUTPUT_RR_UNI].setVoltage(currentJob.rrRand[0]);
-        outputs[OUTPUT_RR_BI].setVoltage(currentJob.rrRand[1]);
+        outputs[OUTPUT_RR_ONE].setVoltage(currentJob.rrRand[0]);
+        outputs[OUTPUT_RR_TWO].setVoltage(currentJob.rrRand[1]);
 
         if (stopImmediately)
         {

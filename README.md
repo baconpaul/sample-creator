@@ -8,20 +8,22 @@ Big swaths of work until there is though
     - metadata?
 - Changes
     - RR vars can be UNI or BI per instance and have a distro uni or norm
-    - add a trigger output and the out section can be 4x4 of voct/vel/gate/trig rr/mode/rr/mode/rri
-    - Where rri is round robin index as a 0-10 percent
 - UI
-    - Draw the damn thing once on paper to kinda get an idea
     - Show the keyboard as a 'progress bar'
-    - Recording Status
-    - An actual design! Lets hope Steve bites :)
+    - Dropdown item
+    - Spacing, labels not centered, etc in the control region
+    - Recording Status display
     - Light skin doesn't suck
     - Scroll bar on the log would be nice eh
+    - Status region next to buttons
+    - Buttons get glyphs not text
+    - Path regino shows path and has a set button rather than just massive button
+    - An actual design! Lets hope Steve bites :)
 - Important Details
     - Any error handling at all in the RIFF writer
     - Try/Catch around all filesystem things
-    - A way to display errors on screen
-    - stopre the path used in the patch
+    - A way to display errors on screen in the log as red text
+    - store the path used in the patch
 - Engine / Rendering
     - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
       half and add fades but controlling that is tricky
