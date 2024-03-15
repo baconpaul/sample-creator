@@ -123,6 +123,13 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         return res;
     }
 
+    std::vector<SampleCreatorModule::RenderJob> jobs;
+    void pushNewJobSet(const std::vector<SampleCreatorModule::RenderJob> &j)
+    {
+        jobs = j;
+        // Repaint
+    }
+
     void draw(const DrawArgs &args) override
     {
         auto vg = args.vg;
@@ -132,6 +139,22 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         nvgRect(vg, 0, 0, box.size.x, box.size.y);
         nvgFill(vg);
         nvgStroke(vg);
+
+        auto mks = box.size.x / 128.0;
+        auto vls = box.size.y / 128.0;
+
+        for (auto j : jobs)
+        {
+            auto xs = j.noteFrom * mks;
+            auto xe = j.noteTo * mks;
+            auto ys = (127 - j.velTo) * vls;
+            auto ye = (127 - j.velFrom) * vls;
+
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, nvgRGB(255, 0, 0));
+            nvgRect(vg, xs, ys, xe - xs, ye - ys);
+            nvgStroke(vg);
+        }
     }
 
     void onSkinChanged() override {}
@@ -330,10 +353,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             addRR("RR2", M::RR2_TYPE);
         }
 
-        auto kb = SampleCreatorJobsKeyboard::create(
+        jobsKeyboard = SampleCreatorJobsKeyboard::create(
             rack::Vec(margin, margin),
             rack::Vec(box.size.x - 2 * margin, keyboardYEnd - 2 * margin), m);
-        addChild(kb);
+        addChild(jobsKeyboard);
 
         auto rangeSubRegion = rangeRegion;
         rangeSubRegion.size.y = rangeRegion.size.y * 0.2;
@@ -506,6 +529,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
     rack::Rect inputRegion, outputRegion, rangeRegion, logRegion, statusRegion, pathRegion;
 
+    SampleCreatorJobsKeyboard *jobsKeyboard{nullptr};
+
     void setupPositions()
     {
         auto regionHeight = box.size.y - footerHeight;
@@ -645,9 +670,19 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 }
             }
 
-            if (paramChanged)
+            if (paramChanged && jobsKeyboard)
             {
-                std::cout << "Invalidating keyboard layout" << std::endl;
+                std::vector<SampleCreatorModule::RenderJob> jobs;
+                auto scm = dynamic_cast<SampleCreatorModule *>(module);
+                assert(scm);
+                if (scm)
+                {
+                    scm->populateRenderJobs(jobs);
+                    for (auto j : jobs)
+                    {
+                        jobsKeyboard->pushNewJobSet(jobs);
+                    }
+                }
             }
         }
 
