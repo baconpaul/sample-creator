@@ -145,6 +145,9 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 
         for (auto j : jobs)
         {
+            auto mn = j.midiNote * mks;
+            auto ve = (127 - j.velocity) * vls;
+
             auto xs = j.noteFrom * mks;
             auto xe = j.noteTo * mks;
             auto ys = (127 - j.velTo) * vls;
@@ -153,6 +156,11 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
             nvgBeginPath(vg);
             nvgStrokeColor(vg, nvgRGB(255, 0, 0));
             nvgRect(vg, xs, ys, xe - xs, ye - ys);
+            nvgStroke(vg);
+
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, nvgRGB(0, 0, 255));
+            nvgEllipse(vg, mn, ve, 1, 1);
             nvgStroke(vg);
         }
     }
