@@ -163,13 +163,15 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
                 nvgFill(vg);
             }
 
+            auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
             if (i % 12 == 0)
             {
                 nvgSave(vg);
                 nvgBeginPath(vg);
                 nvgFillColor(vg, nvgRGB(225, 225, 225));
                 nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
-                nvgFontSize(vg, 7);
+                nvgFontFaceId(vg, fid);
+                nvgFontSize(vg, 8);
                 float tx[6], tr[6];
                 nvgTransformIdentity(tx);
                 nvgTransformRotate(tx, M_PI * 0.5);
@@ -465,7 +467,7 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 lp.size.x = 25;
                 dp.pos.x += 25;
                 dp.size.x -= 25;
-                dp = dp.grow({-margin, -margin});
+                dp = dp.grow({-5, -3});
                 addChild(OutPortLabel::create(lp, l));
                 addChild(SCPanelDropDown::create(dp.pos, dp.size, m, p));
                 fh.pos.x += fh.size.x;
@@ -480,8 +482,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             rack::Vec(box.size.x - 2 * margin, keyboardYEnd - 2 * margin), m);
         addChild(jobsKeyboard);
 
-        auto rangeSubRegion = rangeRegion;
-        rangeSubRegion.size.y = rangeRegion.size.y * 0.2;
+        auto rangeSubRegion = rangeRegion.shrink({5, 5});
+        rangeSubRegion.size.y = rangeSubRegion.size.y * 0.2;
 
         auto rangePos = [](auto &subr) {
             auto fh = subr;

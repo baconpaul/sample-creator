@@ -411,6 +411,8 @@ struct SampleCreatorModule : virtual rack::Module,
         auto midiStart = (int)std::round(getParam(MIDI_START_RANGE).getValue());
         auto midiEnd = (int)std::round(getParam(MIDI_END_RANGE).getValue());
 
+        auto velStrategy = (int)std::round(getParam(VELOCITY_STRATEGY).getValue());
+
         if (midiStart > midiEnd)
             std::swap(midiStart, midiEnd);
 
@@ -440,9 +442,16 @@ struct SampleCreatorModule : virtual rack::Module,
                 auto bv = (vl + 0.5) * dVel;
                 auto sv = vl * dVel;
                 auto ev = (vl + 1) * dVel;
-                auto mv = (int)std::round(std::clamp(sqrt(bv), 0., 1.) * 127);
-                auto msv = (int)std::round(std::clamp(sqrt(sv), 0., 1.) * 127);
-                auto mev = (int)std::round(std::clamp(sqrt(ev), 0., 1.) * 127);
+
+                std::function<double(double)> fn = [](double x) { return x; };
+                if (velStrategy == 1)
+                    fn = [](double x) { return sqrt(x); };
+                if (velStrategy == 2)
+                    fn = [](double x) { return x * x; };
+
+                auto mv = (int)std::round(std::clamp(fn(bv), 0., 1.) * 127);
+                auto msv = (int)std::round(std::clamp(fn(sv), 0., 1.) * 127);
+                auto mev = (int)std::round(std::clamp(fn(ev), 0., 1.) * 127);
 
                 auto vrj = mrj;
                 vrj.velocity = mv;
@@ -529,6 +538,7 @@ struct SampleCreatorModule : virtual rack::Module,
             }
             createState = INACTIVE;
             currentJobIndex = -1;
+            clearVU();
             stopImmediately = false;
             return;
         }

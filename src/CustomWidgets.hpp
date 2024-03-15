@@ -154,14 +154,6 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
     {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
-        if (false)
-        {
-            nvgBeginPath(vg);
-            nvgStrokeColor(vg, nvgRGB(0, 255, 0));
-            nvgRect(vg, 0, 0, box.size.x, box.size.y);
-            nvgStroke(vg);
-        }
-
         nvgBeginPath(vg);
         nvgFillColor(vg, (&sampleCreatorSkin->*txtcol)());
         nvgFontFaceId(vg, fid);
@@ -180,6 +172,19 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
         {
             nvgTextAlign(vg, NVG_ALIGN_MIDDLE | NVG_ALIGN_CENTER);
             nvgText(vg, box.size.x * 0.5, box.size.y * 0.5, label.c_str(), nullptr);
+        }
+
+        if (isControlLabel)
+        {
+            float bounds[4];
+            nvgTextBounds(vg, 0, box.size.y * 0.5, label.c_str(), nullptr, bounds);
+            auto b1 = bounds[2] + 3;
+            nvgBeginPath(vg);
+            nvgMoveTo(vg, b1, box.size.y * 0.5);
+            nvgLineTo(vg, box.size.x - 5, box.size.y * 0.5);
+            nvgStrokeColor(vg, (&sampleCreatorSkin->*txtcol)());
+            nvgStrokeWidth(vg, 0.5);
+            nvgStroke(vg);
         }
     }
 
@@ -487,6 +492,21 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
             label = getParamQuantity()->getDisplayValueString();
         }
         nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+
+        auto cl = rack::Vec(0, 0);
+        cl.x += box.size.x - buttonW / 2;
+        cl.y += box.size.y / 2;
+
+        nvgBeginPath(vg);
+        nvgMoveTo(vg, cl.x - 3, cl.y - 2);
+        nvgLineTo(vg, cl.x + 3, cl.y - 2);
+        nvgLineTo(vg, cl.x, cl.y + 2);
+        nvgClosePath(vg);
+        if (hover)
+            nvgFillColor(vg, nvgRGB(50, 50, 60));
+        else
+            nvgFillColor(vg, nvgRGB(20, 20, 30));
+        nvgFill(vg);
     }
 
     std::string labelCache{};

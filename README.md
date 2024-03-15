@@ -8,11 +8,10 @@ Big swaths of work until there is though
 - UI
     - Round Robin overpaint in keyboard
     - Double buffer keyboard
-    - Dropdown item look and feel - get an arrow
-    - Spacing, labels not centered, etc in the control region
     - Recording Status display
-    - Light skin doesn't suck
+    - Light skin doesn't suck (and is objeyed in step() in the Skin)
     - Scroll bar on the log would be nice eh
+    - Maybe timestamp in the scroll bar?
     - Status region next to buttons
     - Buttons get glyphs not text
     - Path regino shows path and has a set button rather than just massive button
@@ -24,10 +23,10 @@ Big swaths of work until there is though
     - A way to display errors on screen in the log as red text
     - store the path used in the patch
 - Engine / Rendering
-    - Impl RR strategy, velocity strategy engine side
+    - Impl RR strategy
     - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
       half and add fades but controlling that is tricky
     - Loop Points - should we do something?
     - A "Latency Mode" for when resampling host
     - Optionally render polyphonically to save time?
-    - LintBuddy it
+  
