@@ -259,7 +259,7 @@ struct SampleCreatorModule : virtual rack::Module,
     };
 
     std::vector<RenderJob> renderJobs;
-    int64_t currentJobIndex{-1}; // don't need to be atomic since only used on audio thread
+    std::atomic<int64_t> currentJobIndex{-1};
 
     static constexpr int ioSampleBlockSize{16};
     static constexpr int ioSampleBlocksAvailable{8192};
@@ -416,7 +416,6 @@ struct SampleCreatorModule : virtual rack::Module,
 
         auto numSteps = (int)std::ceil(1.f * (midiEnd - midiStart) / midiStep);
         auto coverDiff = numSteps * midiStep - (midiEnd - midiStart);
-        std::cout << "coverDiff " << coverDiff << std::endl;
 
         onto.clear();
         for (int i = 0; i < numSteps; ++i)
@@ -529,6 +528,7 @@ struct SampleCreatorModule : virtual rack::Module,
                 renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, 0});
             }
             createState = INACTIVE;
+            currentJobIndex = -1;
             stopImmediately = false;
             return;
         }
@@ -601,6 +601,7 @@ struct SampleCreatorModule : virtual rack::Module,
             {
                 createState = INACTIVE;
                 renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::END_RENDER});
+                currentJobIndex = -1;
 
                 pushMessage("Render Complete");
                 clearVU();

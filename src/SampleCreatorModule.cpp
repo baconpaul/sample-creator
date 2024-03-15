@@ -124,31 +124,63 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
     }
 
     std::vector<SampleCreatorModule::RenderJob> jobs;
+    int sn{0}, en{127};
     void pushNewJobSet(const std::vector<SampleCreatorModule::RenderJob> &j)
     {
         jobs = j;
-        // Repaint
+        sn = 127;
+        en = 0;
+        for (auto j : jobs)
+        {
+            sn = std::min(j.noteFrom, sn);
+            en = std::max(j.noteTo, en);
+        }
+        // round to octave
+        sn = (sn / 12) * 12;
+        en = ((en + 11) / 12) * 12;
     }
 
     void drawKeyboard(NVGcontext *vg)
     {
-        nvgBeginPath(vg);
-        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
-        nvgRect(vg, 0, 0, box.size.x, box.size.y);
-        nvgStroke(vg);
 
-        auto mks = box.size.x / 128.0;
+        auto mks = box.size.x / (en - sn);
 
-        for (int i = 0; i < 128; ++i)
+        for (int i = sn; i < en; ++i)
         {
             auto k = i % 12;
             auto bk = false;
             if (k == 1 || k == 3 || k == 6 || k == 8 || k == 10)
                 bk = true;
             nvgBeginPath(vg);
-            nvgFillColor(vg, bk ? nvgRGB(40, 40, 40) : nvgRGB(100, 100, 100));
-            nvgRect(vg, i * mks, 0, mks, box.size.y);
+            nvgFillColor(vg, nvgRGB(100, 100, 100));
+            nvgRect(vg, (i - sn) * mks, 0, mks, box.size.y);
             nvgFill(vg);
+            if (bk)
+            {
+                nvgBeginPath(vg);
+                nvgFillColor(vg, nvgRGB(40, 40, 40));
+                nvgRect(vg, (i - sn) * mks, 0, mks, box.size.y * 0.7);
+                nvgFill(vg);
+            }
+
+            if (i % 12 == 0)
+            {
+                nvgSave(vg);
+                nvgBeginPath(vg);
+                nvgFillColor(vg, nvgRGB(225, 225, 225));
+                nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+                nvgFontSize(vg, 7);
+                float tx[6], tr[6];
+                nvgTransformIdentity(tx);
+                nvgTransformRotate(tx, M_PI * 0.5);
+                nvgTransformIdentity(tr);
+                nvgTransformTranslate(tr, (i - sn) * mks + mks / 2, box.size.y * 0.9);
+                nvgTransformMultiply(tx, tr);
+
+                nvgTransform(vg, tx[0], tx[1], tx[2], tx[3], tx[4], tx[5]);
+                nvgText(vg, 0, 0, std::to_string(i).c_str(), nullptr);
+                nvgRestore(vg);
+            }
         }
     }
 
@@ -158,31 +190,92 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 
         drawKeyboard(vg);
 
-        auto mks = box.size.x / 128.0;
+        auto mks = box.size.x / (en - sn);
         auto vls = box.size.y / 128.0;
 
+        auto idx = 0;
+        auto cji = -1;
+        if (module)
+        {
+            cji = module->currentJobIndex;
+        }
         for (auto j : jobs)
         {
-            auto mn = j.midiNote * mks;
+            auto mn = (j.midiNote - sn) * mks;
             auto ve = (127 - j.velocity) * vls;
 
-            auto xs = j.noteFrom * mks;
-            auto xe = j.noteTo * mks;
+            auto xs = (j.noteFrom - sn) * mks;
+            auto xe = (j.noteTo - sn) * mks;
             auto ys = (127 - j.velTo) * vls;
             auto ye = (127 - j.velFrom) * vls;
 
-            nvgBeginPath(vg);
-            nvgStrokeColor(vg, nvgRGB(220, 220, 220));
+            if (idx == cji)
+            {
+                // paint in the glow layer
+            }
+            else
+            {
+                nvgStrokeColor(vg, nvgRGB(220, 220, 220));
+                if (idx > cji)
+                {
+                    nvgFillColor(vg, nvgRGBA(220, 220, 220, 100));
+                }
+                else
+                {
+                    nvgFillColor(vg, nvgRGBA(120, 120, 120, 120));
+                }
 
-            nvgFillColor(vg, nvgRGBA(220, 220, 220, 100));
-            nvgRect(vg, xs, ys, xe - xs, ye - ys);
-            nvgFill(vg);
-            nvgStroke(vg);
+                nvgBeginPath(vg);
 
-            nvgBeginPath(vg);
-            nvgStrokeColor(vg, nvgRGB(255, 255, 0));
-            nvgEllipse(vg, mn, ve, 1, 1);
-            nvgStroke(vg);
+                nvgRect(vg, xs, ys, xe - xs, ye - ys);
+                nvgFill(vg);
+                nvgStroke(vg);
+            }
+            idx++;
+        }
+    }
+
+    void drawLayer(const DrawArgs &args, int layer) override
+    {
+        if (layer == 1)
+        {
+            auto vg = args.vg;
+            auto mks = box.size.x / (en - sn);
+            auto vls = box.size.y / 128.0;
+
+            auto idx = 0;
+            auto cji = -1;
+            if (module)
+            {
+                cji = module->currentJobIndex;
+            }
+            for (auto j : jobs)
+            {
+                auto mn = (j.midiNote - sn) * mks;
+                auto ve = (127 - j.velocity) * vls;
+
+                auto xs = (j.noteFrom - sn) * mks;
+                auto xe = (j.noteTo - sn) * mks;
+                auto ys = (127 - j.velTo) * vls;
+                auto ye = (127 - j.velFrom) * vls;
+
+                if (idx == cji)
+                {
+                    nvgStrokeColor(vg, nvgRGB(220, 220, 255));
+                    nvgFillColor(vg, nvgRGBA(220, 220, 255, 200));
+
+                    nvgBeginPath(vg);
+                    nvgRect(vg, xs, ys, xe - xs, ye - ys);
+                    nvgFill(vg);
+                    nvgStroke(vg);
+                }
+                idx++;
+
+                nvgBeginPath(vg);
+                nvgStrokeColor(vg, nvgRGB(255, 255, 0));
+                nvgEllipse(vg, mn, ve, 1, 1);
+                nvgStroke(vg);
+            }
         }
     }
 
@@ -428,10 +521,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
             rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-            addChild(OutPortLabel::create(fl, "Start"));
+            addChild(OutPortLabel::createCtrlLabel(fl, "Start"));
             pWithK(fw, M::MIDI_START_RANGE);
 
-            addChild(OutPortLabel::create(sl, "End"));
+            addChild(OutPortLabel::createCtrlLabel(sl, "End"));
             pWithK(sw, M::MIDI_END_RANGE);
         }
 
@@ -439,10 +532,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
             rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-            addChild(OutPortLabel::create(fl, "Gate Time"));
+            addChild(OutPortLabel::createCtrlLabel(fl, "Gate Time"));
             pWithK(fw, M::GATE_TIME);
 
-            addChild(OutPortLabel::create(sl, "Release Mode"));
+            addChild(OutPortLabel::createCtrlLabel(sl, "Release Mode"));
             addChild(SCPanelDropDown::create(sw.pos, sw.size, module, M::REL_MODE));
         }
 
@@ -450,10 +543,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
             rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-            addChild(OutPortLabel::create(fl, "Step Size"));
+            addChild(OutPortLabel::createCtrlLabel(fl, "Step Size"));
             pWithK(fw, M::MIDI_STEP_SIZE);
 
-            addChild(OutPortLabel::create(sl, "Round Robin"));
+            addChild(OutPortLabel::createCtrlLabel(sl, "Round Robin"));
             pWithK(sw, M::NUM_ROUND_ROBINS);
         }
 
@@ -461,10 +554,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
             rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-            addChild(OutPortLabel::create(fl, "Vel Layers"));
+            addChild(OutPortLabel::createCtrlLabel(fl, "Vel Layers"));
             pWithK(fw, M::NUM_VEL_LAYERS);
 
-            addChild(OutPortLabel::create(sl, "Vel Strategy"));
+            addChild(OutPortLabel::createCtrlLabel(sl, "Vel Strategy"));
             addChild(SCPanelDropDown::create(sw.pos, sw.size, module, M::VELOCITY_STRATEGY));
         }
 
@@ -472,10 +565,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto [fl, fw, sl, sw] = rangePos(rangeSubRegion);
             rangeSubRegion.pos.y += rangeSubRegion.size.y;
 
-            addChild(OutPortLabel::create(fl, "Latency"));
+            addChild(OutPortLabel::createCtrlLabel(fl, "Latency"));
             pWithK(fw, M::LATENCY_COMPENSATION);
 
-            addChild(OutPortLabel::create(sl, "Polyphony"));
+            addChild(OutPortLabel::createCtrlLabel(sl, "Polyphony"));
             pWithK(sw, M::POLYPHONY);
         }
 

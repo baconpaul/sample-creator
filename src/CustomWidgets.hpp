@@ -81,6 +81,7 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
     std::string label;
+    bool isControlLabel{false};
 
     int halign = NVG_ALIGN_CENTER;
 
@@ -109,6 +110,20 @@ struct SCLabel : rack::Widget, SampleCreatorSkin::Client
 
         r->initBDW();
         r->halign = NVG_ALIGN_CENTER;
+
+        return r;
+    }
+
+    static SCLabel *createCtrlLabel(const rack::Rect &inRect, const std::string &label)
+    {
+        auto r = new SCLabel();
+        r->box = inRect;
+
+        r->label = label;
+
+        r->initBDW();
+        r->halign = NVG_ALIGN_LEFT;
+        r->isControlLabel = true;
 
         return r;
     }

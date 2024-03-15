@@ -6,9 +6,9 @@ Big swaths of work until there is though
     - Is the inst block correct? Endpoint check etc
     - other sample metadata?
 - UI
-    - Show the keyboard as a 'progress bar' - light up currently playing zone when going
+    - Round Robin overpaint in keyboard
     - Double buffer keyboard
-    - Dropdown item look and feel
+    - Dropdown item look and feel - get an arrow
     - Spacing, labels not centered, etc in the control region
     - Recording Status display
     - Light skin doesn't suck
