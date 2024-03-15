@@ -416,7 +416,6 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
 
-    std::string label;
     std::function<void()> onClick{nullptr};
     bool hover{false};
 
@@ -434,8 +433,19 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
         return res;
     }
 
+    int buttonW = 14;
     void drawDropdown(NVGcontext *vg)
     {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
+        nvgFill(vg);
+        nvgStroke(vg);
+
+        nvgSave(vg);
+        nvgScissor(vg, box.size.x - buttonW, 0, buttonW, box.size.y);
         nvgBeginPath(vg);
         nvgFillColor(vg, nvgRGB(255, 0, 0));
         nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
@@ -446,24 +456,47 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
                                   lighten(sampleCreatorSkin.pushButtonFill(), hover ? 1.2 : 1.0)));
         nvgFill(vg);
         nvgStroke(vg);
+        nvgRestore(vg);
 
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
         nvgBeginPath(vg);
-        nvgFillColor(vg, hover ? sampleCreatorSkin.pushButtonHoverText()
-                               : sampleCreatorSkin.pushButtonText());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayText());
         nvgFontFaceId(vg, fid);
         nvgFontSize(vg, 12);
         nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
 
+        auto label = std::string("");
+        if (getParamQuantity())
+        {
+            label = getParamQuantity()->getDisplayValueString();
+        }
         nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
     }
 
+    std::string labelCache{};
+    void step() override
+    {
+        if (module && getParamQuantity())
+        {
+            if (labelCache != getParamQuantity()->getDisplayValueString())
+            {
+                labelCache = getParamQuantity()->getDisplayValueString();
+                bdw->dirty = true;
+            }
+        }
+        rack::ParamWidget::step();
+    }
     void onButton(const ButtonEvent &e) override
     {
-        if (e.action == GLFW_PRESS)
+        if (e.action == GLFW_PRESS && e.pos.x > box.size.x - buttonW)
         {
-            std::cout << "Show Menu" << std::endl;
+            createContextMenu();
+            e.consume(this);
+        }
+        else
+        {
+            rack::ParamWidget::onButton(e);
         }
     }
     void onHover(const HoverEvent &e) override { e.consume(this); }

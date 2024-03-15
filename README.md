@@ -7,7 +7,8 @@ Big swaths of work until there is though
     - other sample metadata?
 - UI
     - Show the keyboard as a 'progress bar' - light up currently playing zone when going
-    - Dropdown item
+    - Double buffer keyboard
+    - Dropdown item look and feel
     - Spacing, labels not centered, etc in the control region
     - Recording Status display
     - Light skin doesn't suck
@@ -24,7 +25,6 @@ Big swaths of work until there is though
     - store the path used in the patch
 - Engine / Rendering
     - Impl RR strategy, velocity strategy engine side
-    - Better midi note division strategy - more centered rather than so one sided
     - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
       half and add fades but controlling that is tricky
     - Loop Points - should we do something?

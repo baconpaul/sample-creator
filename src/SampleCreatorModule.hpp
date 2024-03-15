@@ -168,14 +168,12 @@ struct SampleCreatorModule : virtual rack::Module,
         }
 
         configParam(GATE_TIME, 0.2, 16, 1, "Gate Time", "s");
-        configSwitch(REL_MODE, 0, 1, 0, "Release Mode", {"Until Silence", "Drone"});
+        configSwitch(REL_MODE, 0, 1, 0, "Release Mode", {"Silence", "Drone"});
 
         configParam(LATENCY_COMPENSATION, 0, 512, 0, "Latency Compesnation", "Samples");
         configParam(POLYPHONY, 1, 16, 1, "Polyphony", "Voices");
-        configSwitch(RR1_TYPE, 0, 3, 0, "RR1 Mode",
-                     {"10v Uni", "+/-5v Uni", "+10v 1/2 Normal", "+/-5v Normal", "RR Index 0-10"});
-        configSwitch(RR2_TYPE, 0, 3, 1, "RR2 Mode",
-                     {"10v Uni", "+/-5v Uni", "+10v 1/2 Normal", "+/-5v Normal", "RR Index 0-10"});
+        configSwitch(RR1_TYPE, 0, 2, 0, "RR1 Mode", {"0-10v", "+/-5v", "Index"});
+        configSwitch(RR2_TYPE, 0, 2, 1, "RR1 Mode", {"0-10v", "+/-5v", "Index"});
         configSwitch(VELOCITY_STRATEGY, 0, 2, 1, "Velocity Strategy",
                      {"Uniform", "Sqrt", "Square"});
 
@@ -413,13 +411,23 @@ struct SampleCreatorModule : virtual rack::Module,
         auto midiStart = (int)std::round(getParam(MIDI_START_RANGE).getValue());
         auto midiEnd = (int)std::round(getParam(MIDI_END_RANGE).getValue());
 
+        if (midiStart > midiEnd)
+            std::swap(midiStart, midiEnd);
+
+        auto numSteps = (int)std::ceil(1.f * (midiEnd - midiStart) / midiStep);
+        auto coverDiff = numSteps * midiStep - (midiEnd - midiStart);
+        std::cout << "coverDiff " << coverDiff << std::endl;
+
         onto.clear();
-        for (int mn = midiStart + midiHalf; mn <= midiEnd; mn += midiStep)
+        for (int i = 0; i < numSteps; ++i)
         {
+            auto mn = i * midiStep + midiHalf + midiStart - coverDiff / 2;
             auto nf = mn - midiHalf;
             auto nt = nf + midiStep;
-            if (mn + midiStep > midiEnd)
-                nt = midiEnd;
+
+            nf = std::clamp(nf, midiStart, midiEnd);
+            nt = std::clamp(nt, midiStart, midiEnd);
+            mn = std::clamp((nf + nt) / 2, midiStart, midiEnd);
 
             auto dVel = 1.0 / (numVel);
 

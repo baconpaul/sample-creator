@@ -173,6 +173,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 
             nvgBeginPath(vg);
             nvgStrokeColor(vg, nvgRGB(220, 220, 220));
+
             nvgFillColor(vg, nvgRGBA(220, 220, 220, 100));
             nvgRect(vg, xs, ys, xe - xs, ye - ys);
             nvgFill(vg);
