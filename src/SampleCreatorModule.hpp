@@ -35,19 +35,22 @@ namespace fs = ghc::filesystem;
 
 namespace baconpaul::samplecreator
 {
-struct MidiNoteParamQuantity : rack::ParamQuantity
+static std::string midiNoteToName(int midiNote)
 {
     std::vector<std::string> notes{"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    auto v = midiNote;
+    auto oct = v / 12 - 1;
+    auto nt = v % 12;
 
+    char res[256];
+    snprintf(res, 256, "%s%d (%d)", notes[nt].c_str(), oct, v);
+    return std::string(res);
+}
+struct MidiNoteParamQuantity : rack::ParamQuantity
+{
     std::string getDisplayValueString() override
     {
-        auto v = (int)std::round(getValue());
-        auto oct = v / 12 - 1;
-        auto nt = v % 12;
-
-        char res[256];
-        snprintf(res, 256, "%s%d (%d)", notes[nt].c_str(), oct, v);
-        return std::string(res);
+        return midiNoteToName((int)std::round(getValue()));
     }
     void setDisplayValueString(std::string s) override
     {
@@ -180,6 +183,7 @@ struct SampleCreatorModule : virtual rack::Module,
         renderThread = std::make_unique<std::thread>([this]() { renderThreadProcess(); });
 
         pushMessage("Sample Creator Started");
+        pushIdle();
     }
 
     ~SampleCreatorModule()
@@ -193,7 +197,14 @@ struct SampleCreatorModule : virtual rack::Module,
 
     // tis is not entirely thread safe and strings can allocate but
     // it is infrequenty used. Good enough for now.
-    std::array<std::string, 1024> messageBuffer;
+    struct MessageEntry
+    {
+        MessageEntry() = default;
+        MessageEntry(const std::string &s) : message(s) { timeStamp = rack::system::getUnixTime(); }
+        std::string message{};
+        double timeStamp{0};
+    };
+    std::array<MessageEntry, 1024> messageBuffer;
     std::atomic<int32_t> mbWrite{0}, mbRead{0};
     void pushMessage(const std::string &s)
     {
@@ -201,11 +212,31 @@ struct SampleCreatorModule : virtual rack::Module,
         mbWrite = (mbWrite + 1) & 1023;
     }
     bool hasMessage() { return mbRead != mbWrite; }
-    std::string popMessage()
+    MessageEntry popMessage()
     {
         auto res = messageBuffer[mbRead];
         mbRead = (mbRead + 1) & 1023;
         return res;
+    }
+
+    std::array<std::array<std::string, 32>, 2> statusBuffer;
+    std::array<std::atomic<int32_t>, 2> statusWrite{0, 0}, statusRead{0, 0};
+    void pushStatus(const std::string &s, int buffer)
+    {
+        statusBuffer[buffer][statusWrite[buffer]] = s;
+        statusWrite[buffer] = (statusWrite[buffer] + 1) & 31;
+    }
+    bool hasStatus(int buffer) { return statusWrite[buffer] != statusRead[buffer]; }
+    std::string popStatus(int buffer)
+    {
+        auto res = statusBuffer[buffer][statusRead[buffer]];
+        statusRead[buffer] = (statusRead[buffer] + 1) & 31;
+        return res;
+    }
+    void pushIdle()
+    {
+        pushStatus("Idle", 0);
+        pushStatus("-", 1);
     }
 
     std::optional<std::vector<labeledStereoPort_t>> getPrimaryInputs() override
@@ -346,7 +377,9 @@ struct SampleCreatorModule : virtual rack::Module,
     void renderThreadNewNote(int jobid, double sr)
     {
         auto &currentJob = renderJobs[jobid];
-        pushMessage(std::string("Starting note ") + std::to_string(currentJob.midiNote));
+        pushMessage(std::string("Starting note ") + midiNoteToName(currentJob.midiNote) +
+                    " vel=" + std::to_string(currentJob.velocity) +
+                    " rr=" + std::to_string(currentJob.roundRobinIndex));
 
         auto bn = std::string("sample") + "_note_" + std::to_string((int)currentJob.midiNote) +
                   "_vel_" + std::to_string((int)currentJob.velocity) + "_rr_" +
@@ -355,8 +388,9 @@ struct SampleCreatorModule : virtual rack::Module,
         if (!testMode)
         {
             int nChannels = inputs[INPUT_R].isConnected() ? 2 : 1;
-            pushMessage(std::string("Writing ") + (nChannels == 2 ? "stereo" : "mono") + " file '" +
-                        fn.filename().u8string() + "' at 32-bit " + std::to_string(sr) + " sr");
+            pushMessage("Writing '" + fn.filename().u8string() + "'");
+            pushMessage(std::string("   - 32 bit ") + (nChannels == 2 ? "stereo" : "mono") + " @ " +
+                        std::to_string(sr) + " sr");
             riffWavWriter = riffwav::RIFFWavWriter(fn, nChannels);
             riffWavWriter.openFile();
             riffWavWriter.writeRIFFHeader();
@@ -475,6 +509,8 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         if (createState == INACTIVE && startOperating)
         {
+            pushStatus(testMode ? "Test" : "Record", 0);
+            pushStatus("Start", 1);
             pushMessage(std::string("Starting render in ") +
                         (testMode ? "Test Mode" : "Record Mode"));
             startOperating = false;
@@ -488,7 +524,7 @@ struct SampleCreatorModule : virtual rack::Module,
             {
                 fs::create_directories(currentSampleDir);
                 fs::create_directories(currentSampleWavDir);
-                pushMessage("Writing to '" + currentSampleDir.u8string() + "'");
+                pushMessage("Output to '" + currentSampleDir.u8string() + "'");
             }
 
             populateRenderJobs(renderJobs);
@@ -502,12 +538,17 @@ struct SampleCreatorModule : virtual rack::Module,
         {
             outputs[OUTPUT_VOCT].setVoltage(0.f);
             outputs[OUTPUT_GATE].setVoltage(0.f);
+            clearVU();
             return;
         }
 
         if (createState == NEW_NOTE)
         {
             currentJobIndex++;
+            auto jbn = renderJobs[currentJobIndex].midiNote;
+            pushStatus(std::to_string(currentJobIndex) + "/" + std::to_string(renderJobs.size()) +
+                           " " + midiNoteToName(jbn),
+                       1);
             playbackPos = 0;
             gateSamples = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
             createState = GATED_RECORD;
@@ -539,6 +580,7 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = INACTIVE;
             currentJobIndex = -1;
             clearVU();
+            pushIdle();
             stopImmediately = false;
             return;
         }
@@ -575,7 +617,6 @@ struct SampleCreatorModule : virtual rack::Module,
 
                 if (silent)
                 {
-                    pushMessage("Note Render complete.");
                     createState = SPINDOWN_BUFFER;
                     playbackPos = 0;
                     if (!testMode)
@@ -613,8 +654,8 @@ struct SampleCreatorModule : virtual rack::Module,
                 renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::END_RENDER});
                 currentJobIndex = -1;
 
-                pushMessage("Render Complete");
                 clearVU();
+                pushIdle();
             }
             else
             {

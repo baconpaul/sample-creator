@@ -66,17 +66,29 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
         float x = 2, y = 2;
         for (auto m : msgDeq)
         {
+            struct std::tm *timeinfo;
+            char buffer[80];
+
+            time_t t = (time_t)m.timeStamp;
+            // convert unix timestamp to time structure
+            timeinfo = std::localtime(&t);
+
+            // format the time structure into a string
+            std::strftime(buffer, 80, "%H:%M:%S", timeinfo);
+
             nvgBeginPath(vg);
             nvgFillColor(vg, sampleCreatorSkin.logText());
             nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
             nvgFontFaceId(vg, fid);
             nvgFontSize(vg, linesz - 1);
-            nvgText(vg, x, y, m.c_str(), nullptr);
+
+            auto msg = std::string(buffer) + " " + m.message;
+            nvgText(vg, x, y, msg.c_str(), nullptr);
             y += linesz;
         }
     }
 
-    std::deque<std::string> msgDeq;
+    std::deque<SampleCreatorModule::MessageEntry> msgDeq;
     void step() override
     {
         if (module)
@@ -108,6 +120,92 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
     }
 };
 
+struct SampleCreatorStatusWidget : rack::Widget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
+
+    SampleCreatorModule *module{nullptr};
+    static SampleCreatorStatusWidget *create(const rack::Vec &pos, const rack::Vec &size,
+                                             SampleCreatorModule *m)
+    {
+        auto res = new SampleCreatorStatusWidget();
+        res->box.size = size;
+        res->box.pos = pos;
+        res->module = m;
+
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawBG(a); });
+        res->addChild(res->bdw);
+
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawStatus(vg); });
+        res->addChild(res->bdwLayer);
+
+        return res;
+    }
+
+    void drawBG(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
+        nvgFill(vg);
+        nvgStroke(vg);
+    }
+
+    void drawStatus(NVGcontext *vg)
+    {
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, sampleCreatorSkin.logText());
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 18);
+
+        nvgText(vg, 2, 2, status[0].c_str(), nullptr);
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, sampleCreatorSkin.logText());
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 18);
+
+        nvgText(vg, 2, 21, status[1].c_str(), nullptr);
+    }
+
+    std::string status[2];
+    void step() override
+    {
+        if (module)
+        {
+            for (int i = 0; i < 2; ++i)
+            {
+                if (module->hasStatus(i))
+                {
+                    status[i] = module->popStatus(i);
+                    bdw->dirty = true;
+                    bdwLayer->dirty = true;
+                }
+            }
+        }
+        rack::Widget::step();
+    }
+
+    void onSkinChanged() override
+    {
+        if (bdw)
+        {
+            bdw->dirty = true;
+        }
+        if (bdwLayer)
+        {
+            bdwLayer->dirty = true;
+        }
+    }
+};
 struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 {
     SampleCreatorModule *module{nullptr};
@@ -211,7 +309,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
             auto ys = (127 - j.velTo) * vls;
             auto ye = (127 - j.velFrom) * vls;
 
-            if (idx == cji)
+            if (idx == cji || j.roundRobinIndex != 0)
             {
                 // paint in the glow layer
             }
@@ -605,6 +703,10 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 if (m)
                     m->stopImmediately = true;
             });
+
+            rg.size.x = statusRegion.size.x - rg.pos.x;
+            rg = rg.shrink({margin, margin});
+            addChild(SampleCreatorStatusWidget::create(rg.pos, rg.size, m));
         }
 
         {
@@ -674,9 +776,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         rangeRegion = rack::Rect(controlsXSplit, keyboardYEnd, box.size.x - controlsXSplit,
                                  controlsYEnd - keyboardYEnd)
                           .grow({-margin, -margin});
-        logRegion = rack::Rect(0, regionHeight * 0.6, controlsXSplit, regionHeight * 0.4)
+        logRegion = rack::Rect(0, regionHeight * 0.5, controlsXSplit, regionHeight * 0.5)
                         .grow({-margin, -margin});
-        statusRegion = rack::Rect(0, keyboardYEnd, controlsXSplit, regionHeight * 0.15)
+        statusRegion = rack::Rect(0, keyboardYEnd, controlsXSplit, regionHeight * 0.13)
                            .grow({-margin, -margin});
         pathRegion = statusRegion;
         pathRegion.pos.y += pathRegion.size.y;
