@@ -447,6 +447,9 @@ struct SampleCreatorModule : virtual rack::Module,
 
         auto velStrategy = (int)std::round(getParam(VELOCITY_STRATEGY).getValue());
 
+        auto rrOneStrategy = (int)std::round(getParam(RR1_TYPE).getValue());
+        auto rrTwoStrategy = (int)std::round(getParam(RR2_TYPE).getValue());
+
         if (midiStart > midiEnd)
             std::swap(midiStart, midiEnd);
 
@@ -497,8 +500,32 @@ struct SampleCreatorModule : virtual rack::Module,
                     auto rj = vrj;
                     rj.roundRobinIndex = rr;
                     rj.roundRobinOutOf = numRR;
-                    rj.rrRand[0] = uniReal(reng) * 10.f;
-                    rj.rrRand[1] = uniReal(reng) * 10.f - 5.f;
+                    switch (rrOneStrategy)
+                    {
+                    case 2: // index
+                        rj.rrRand[0] = (numRR == 1 ? 0 : 10.f * rr / (numRR - 1));
+                        break;
+                    case 1: // pm5v
+                        rj.rrRand[0] = uniReal(reng) * 10.f - 5.f;
+                        break;
+                    default:
+                    case 0: // 0-10v
+                        rj.rrRand[0] = uniReal(reng) * 10.f;
+                        break;
+                    }
+                    switch (rrTwoStrategy)
+                    {
+                    case 2: // index
+                        rj.rrRand[1] = (numRR == 1 ? 0 : 10.f * rr / (numRR - 1));
+                        break;
+                    case 1: // pm5v
+                        rj.rrRand[1] = uniReal(reng) * 10.f - 5.f;
+                        break;
+                    default:
+                    case 0: // 0-10v
+                        rj.rrRand[1] = uniReal(reng) * 10.f;
+                        break;
+                    }
                     onto.push_back(rj);
                 }
             }

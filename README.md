@@ -18,7 +18,6 @@ Big swaths of work until there is though
     - A way to display errors on screen in the log as red text
     - store the path used in the patch
 - Engine / Rendering
-    - Impl RR strategy
     - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
       half and add fades but controlling that is tricky
     - Loop Points - should we do something?
