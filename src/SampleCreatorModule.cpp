@@ -77,7 +77,11 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
             std::strftime(buffer, 80, "%H:%M:%S", timeinfo);
 
             nvgBeginPath(vg);
-            nvgFillColor(vg, sampleCreatorSkin.logText());
+            if (m.isError)
+                nvgFillColor(vg, sampleCreatorSkin.logErrorText());
+            else
+                nvgFillColor(vg, sampleCreatorSkin.logText());
+
             nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
             nvgFontFaceId(vg, fid);
             nvgFontSize(vg, linesz - 1);
@@ -206,6 +210,85 @@ struct SampleCreatorStatusWidget : rack::Widget, SampleCreatorSkin::Client
         }
     }
 };
+
+struct SampleCreatorPathWidget : rack::Widget, SampleCreatorSkin::Client
+{
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
+
+    SampleCreatorModule *module{nullptr};
+    static SampleCreatorPathWidget *create(const rack::Vec &pos, const rack::Vec &size,
+                                           SampleCreatorModule *m)
+    {
+        auto res = new SampleCreatorPathWidget();
+        res->box.size = size;
+        res->box.pos = pos;
+        res->module = m;
+
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawBG(a); });
+        res->addChild(res->bdw);
+
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawStatus(vg); });
+        res->addChild(res->bdwLayer);
+
+        return res;
+    }
+
+    void drawBG(NVGcontext *vg)
+    {
+        nvgBeginPath(vg);
+        nvgFillColor(vg, nvgRGB(255, 0, 0));
+        nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
+        nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayBG());
+        nvgFill(vg);
+        nvgStroke(vg);
+    }
+
+    void drawStatus(NVGcontext *vg)
+    {
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+
+        nvgBeginPath(vg);
+        nvgFillColor(vg, sampleCreatorSkin.logText());
+        nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 14);
+
+        nvgText(vg, box.size.x - 2, 2, path.c_str(), nullptr);
+    }
+
+    std::string path;
+    fs::path cacheModulePath;
+    void step() override
+    {
+        if (module)
+        {
+            if (cacheModulePath != module->currentSampleDir)
+            {
+                cacheModulePath = module->currentSampleDir;
+                path = cacheModulePath.u8string();
+                bdw->dirty = true;
+                bdwLayer->dirty = true;
+            }
+        }
+        rack::Widget::step();
+    }
+
+    void onSkinChanged() override
+    {
+        if (bdw)
+        {
+            bdw->dirty = true;
+        }
+        if (bdwLayer)
+        {
+            bdwLayer->dirty = true;
+        }
+    }
+};
+
 struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 {
     SampleCreatorModule *module{nullptr};
@@ -711,9 +794,23 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
 
         {
             auto ug = pathRegion.shrink({margin, margin});
-            auto bt =
-                SCPanelPushButton::create(ug.pos, ug.size, "Set Path", [this]() { selectPath(); });
+            auto pathDisp = ug;
+            auto pathCtrl = ug;
+            pathDisp.size.y = 22;
+            pathCtrl.size.y -= 22;
+            pathCtrl.pos.y += 22;
+
+            addChild(SampleCreatorPathWidget::create(pathDisp.pos, pathDisp.size, m));
+
+            pathCtrl.size.x = pathCtrl.size.x * 0.5;
+            auto bt = SCPanelPushButton::create(pathCtrl.shrink({margin, margin}).pos,
+                                                pathCtrl.shrink({margin, margin}).size, "Set Path",
+                                                [this]() { selectPath(); });
             addChild(bt);
+            pathCtrl.pos.x += pathCtrl.size.x;
+            addChild(SCPanelDropDown::create(pathCtrl.shrink({margin, margin}).pos,
+                                             pathCtrl.shrink({margin, margin}).size, m,
+                                             M::OUTPUT_FORMAT));
         }
     }
 

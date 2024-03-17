@@ -106,6 +106,8 @@ struct SampleCreatorModule : virtual rack::Module,
 
         VELOCITY_STRATEGY,
 
+        OUTPUT_FORMAT,
+
         NUM_PARAMS
     };
 
@@ -170,7 +172,7 @@ struct SampleCreatorModule : virtual rack::Module,
             q->snapEnabled = true;
         }
 
-        configParam(GATE_TIME, 0.2, 16, 1, "Gate Time", "s");
+        configParam(GATE_TIME, 0.01, 16, 1, "Gate Time", "s");
         configSwitch(REL_MODE, 0, 1, 0, "Release Mode", {"Silence", "Drone"});
 
         configParam(LATENCY_COMPENSATION, 0, 512, 0, "Latency Compesnation", "Samples");
@@ -179,6 +181,8 @@ struct SampleCreatorModule : virtual rack::Module,
         configSwitch(RR2_TYPE, 0, 2, 1, "RR1 Mode", {"0-10v", "+/-5v", "Index"});
         configSwitch(VELOCITY_STRATEGY, 0, 2, 1, "Velocity Strategy",
                      {"Uniform", "Sqrt", "Square"});
+
+        configSwitch(OUTPUT_FORMAT, 0, 2, 1, "Output Format", {"Just WAV", "SFZ", "MultiSample"});
 
         renderThread = std::make_unique<std::thread>([this]() { renderThreadProcess(); });
 
@@ -201,7 +205,12 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         MessageEntry() = default;
         MessageEntry(const std::string &s) : message(s) { timeStamp = rack::system::getUnixTime(); }
+        MessageEntry(const std::string &s, bool ie) : message(s), isError(ie)
+        {
+            timeStamp = rack::system::getUnixTime();
+        }
         std::string message{};
+        bool isError{false};
         double timeStamp{0};
     };
     std::array<MessageEntry, 1024> messageBuffer;
@@ -209,6 +218,11 @@ struct SampleCreatorModule : virtual rack::Module,
     void pushMessage(const std::string &s)
     {
         messageBuffer[mbWrite] = s;
+        mbWrite = (mbWrite + 1) & 1023;
+    }
+    void pushError(const std::string &s)
+    {
+        messageBuffer[mbWrite] = {s, true};
         mbWrite = (mbWrite + 1) & 1023;
     }
     bool hasMessage() { return mbRead != mbWrite; }
@@ -246,11 +260,22 @@ struct SampleCreatorModule : virtual rack::Module,
 
     json_t *dataToJson() override
     {
+        namespace jh = sst::rackhelpers::json;
         auto res = json_object();
+
+        json_object_set_new(res, "path", json_string(currentSampleDir.u8string().c_str()));
         return res;
     }
 
-    void dataFromJson(json_t *rootJ) override { namespace jh = sst::rackhelpers::json; }
+    void dataFromJson(json_t *rootJ) override
+    {
+        namespace jh = sst::rackhelpers::json;
+        auto popt = jh::jsonSafeGet<std::string>(rootJ, "path");
+        if (popt.has_value())
+        {
+            currentSampleDir = fs::path{*popt};
+        }
+    }
 
     uint64_t playbackPos{0};
 
@@ -418,6 +443,11 @@ struct SampleCreatorModule : virtual rack::Module,
     {
         if (testMode)
             return;
+        if (!riffWavWriter.outf)
+        {
+            pushError("Attempted to write to unopened file");
+            return;
+        }
         auto *data = &(ioBlocks[whichBlock][0][0]);
         if (riffWavWriter.nChannels == 2)
         {

@@ -116,6 +116,7 @@ struct SampleCreatorSkin
     COL(pushButtonHoverText, nvgRGB(210, 210, 220), nvgRGB(210, 210, 220));
 
     COL(logText, nvgRGB(20, 240, 20), nvgRGB(20, 240, 20));
+    COL(logErrorText, nvgRGB(240, 20, 20), nvgRGB(240, 20, 20));
     COL(vuLevel, nvgRGB(240, 120, 0), nvgRGB(240, 120, 0));
 };
 
