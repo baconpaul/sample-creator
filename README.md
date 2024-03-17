@@ -3,8 +3,7 @@ Nothing to see here.
 Big swaths of work until there is though
 
 - Format Support
-    - Is the inst block correct? Endpoint check etc
-    - other sample metadata?
+    - Do we want to store or write other sample metadata?
     - Bitwig Sampler Format
 - UI
     - Double buffer keyboard
@@ -25,3 +24,4 @@ Big swaths of work until there is though
     - Implement "Latency Mode" for when resampling host
     - Implement polyphonic rendering
     - Test then Start without a Stop gets the state confused
+    - SFZ won't load in tal sampler. Why?

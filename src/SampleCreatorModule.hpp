@@ -421,7 +421,8 @@ struct SampleCreatorModule : virtual rack::Module,
             riffWavWriter.writeRIFFHeader();
             riffWavWriter.writeFMTChunk(sr);
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
-                                         currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
+                                         currentJob.noteTo - 1, currentJob.velFrom,
+                                         currentJob.velTo);
             riffWavWriter.startDataChunk();
 
             if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
