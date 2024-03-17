@@ -330,8 +330,11 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         {
             auto k = i % 12;
             auto bk = false;
+            auto sidel = false;
             if (k == 1 || k == 3 || k == 6 || k == 8 || k == 10)
                 bk = true;
+            if (k == 5 || k == 0)
+                sidel = true;
             nvgBeginPath(vg);
             nvgFillColor(vg, nvgRGB(100, 100, 100));
             nvgRect(vg, (i - sn) * mks, 0, mks, box.size.y);
@@ -342,6 +345,23 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
                 nvgFillColor(vg, nvgRGB(40, 40, 40));
                 nvgRect(vg, (i - sn) * mks, 0, mks, box.size.y * 0.7);
                 nvgFill(vg);
+
+                nvgBeginPath(vg);
+                nvgStrokeColor(vg, nvgRGB(40, 40, 40));
+                nvgMoveTo(vg, (i - sn + 0.5) * mks, 0);
+                nvgLineTo(vg, (i - sn + 0.5) * mks, box.size.y);
+                nvgStrokeWidth(vg, 0.50);
+                nvgStroke(vg);
+            }
+
+            if (sidel)
+            {
+                nvgBeginPath(vg);
+                nvgStrokeColor(vg, nvgRGB(40, 40, 40));
+                nvgMoveTo(vg, (i - sn) * mks, 0);
+                nvgLineTo(vg, (i - sn) * mks, box.size.y);
+                nvgStrokeWidth(vg, 0.50);
+                nvgStroke(vg);
             }
 
             auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
@@ -456,7 +476,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 
                 nvgBeginPath(vg);
                 nvgStrokeColor(vg, nvgRGB(255, 255, 0));
-                nvgEllipse(vg, mn, ve, 1, 1);
+                nvgEllipse(vg, mn + mks * 0.5, ve, 1, 1);
                 nvgStroke(vg);
             }
         }

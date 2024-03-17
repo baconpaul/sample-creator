@@ -424,17 +424,20 @@ struct SampleCreatorModule : virtual rack::Module,
                                          currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
             riffWavWriter.startDataChunk();
 
-            if (currentJob.roundRobinIndex == 0)
+            if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
             {
                 sfzFile << "\n<group> "
                         << " seq_length=" << currentJob.roundRobinOutOf << "\n"
                         << std::flush;
             }
 
-            sfzFile << "<region>seq_position=" << (currentJob.roundRobinIndex + 1) << " sample=wav/"
-                    << fn.filename().u8string().c_str() << " lokey=" << currentJob.noteFrom
-                    << " hikey=" << currentJob.noteTo << " pitch_keycenter=" << currentJob.midiNote
-                    << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo << "\n"
+            sfzFile << "<region>";
+            if (currentJob.roundRobinOutOf > 1)
+                sfzFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
+            sfzFile << " sample=wav/" << fn.filename().u8string().c_str()
+                    << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo - 1
+                    << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
+                    << " hivel=" << currentJob.velTo << "\n"
                     << std::flush;
         }
     }
