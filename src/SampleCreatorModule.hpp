@@ -418,8 +418,7 @@ struct SampleCreatorModule : virtual rack::Module,
             riffWavWriter.writeRIFFHeader();
             riffWavWriter.writeFMTChunk(sr);
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
-                                         currentJob.noteTo - 1, currentJob.velFrom,
-                                         currentJob.velTo);
+                                         currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
             riffWavWriter.startDataChunk();
 
             sampleMultiFileAddCurrentJob(currentJob, fn);
@@ -486,7 +485,7 @@ struct SampleCreatorModule : virtual rack::Module,
         if (currentJob.roundRobinOutOf > 1)
             sfzFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
         sfzFile << " sample=wav/" << fn.filename().u8string().c_str()
-                << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo - 1
+                << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo
                 << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
                 << " hivel=" << currentJob.velTo << "\n"
                 << std::flush;
@@ -511,7 +510,7 @@ struct SampleCreatorModule : virtual rack::Module,
         if (midiStart > midiEnd)
             std::swap(midiStart, midiEnd);
 
-        auto numSteps = (int)std::ceil(1.f * (midiEnd - midiStart) / midiStep);
+        auto numSteps = (int)std::ceil(1.f * (midiEnd - midiStart + 1) / midiStep);
         auto coverDiff = numSteps * midiStep - (midiEnd - midiStart);
 
         onto.clear();
@@ -519,7 +518,7 @@ struct SampleCreatorModule : virtual rack::Module,
         {
             auto mn = i * midiStep + midiHalf + midiStart - coverDiff / 2;
             auto nf = mn - midiHalf;
-            auto nt = nf + midiStep;
+            auto nt = nf + midiStep - 1;
 
             nf = std::clamp(nf, midiStart, midiEnd);
             nt = std::clamp(nt, midiStart, midiEnd);
@@ -544,9 +543,12 @@ struct SampleCreatorModule : virtual rack::Module,
                 if (velStrategy == 2)
                     fn = [](double x) { return x * x; };
 
-                auto mv = (int)std::round(std::clamp(fn(bv), 0., 1.) * 127);
-                auto msv = (int)std::round(std::clamp(fn(sv), 0., 1.) * 127);
-                auto mev = (int)std::round(std::clamp(fn(ev), 0., 1.) * 127);
+                auto mv = (int)std::round(std::clamp(fn(bv), 0., 1.) * 128);
+                auto msv = (int)std::round(std::clamp(fn(sv), 0., 1.) * 128);
+                auto mev = (int)std::round(std::clamp(fn(ev), 0., 1.) * 128) - 1;
+                msv = std::clamp(msv, 0, 127);
+                mev = std::clamp(mev, 0, 127);
+                mv = std::clamp(mv, msv, mev);
 
                 auto vrj = mrj;
                 vrj.velocity = mv;

@@ -18,5 +18,4 @@ Big swaths of work until there is though
     - Loop Points - should we do something?
     - Implement "Latency Mode" for when resampling host
     - Implement polyphonic rendering
-    - Test then Start without a Stop gets the state confused
     - SFZ won't load in tal sampler. Why?

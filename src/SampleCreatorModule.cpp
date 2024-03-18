@@ -408,7 +408,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
             auto ve = (127 - j.velocity) * vls;
 
             auto xs = (j.noteFrom - sn) * mks;
-            auto xe = (j.noteTo - sn) * mks;
+            auto xe = (j.noteTo + 1 - sn) * mks;
             auto ys = (127 - j.velTo) * vls;
             auto ye = (127 - j.velFrom) * vls;
 
@@ -458,7 +458,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
                 auto ve = (127 - j.velocity) * vls;
 
                 auto xs = (j.noteFrom - sn) * mks;
-                auto xe = (j.noteTo - sn) * mks;
+                auto xe = (j.noteTo + 1 - sn) * mks;
                 auto ys = (127 - j.velTo) * vls;
                 auto ye = (127 - j.velFrom) * vls;
 
