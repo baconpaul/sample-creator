@@ -365,10 +365,6 @@ struct SampleCreatorModule : virtual rack::Module,
                     {
                         if (!testMode)
                         {
-                            auto iv = (int)std::round(getParam(OUTPUT_FORMAT).getValue());
-                            if (iv < JUST_WAV || iv > DECENT)
-                                iv = JUST_WAV;
-                            multiFormat = (MultiFormats)iv;
                             sampleMultiFileStart();
                         }
                     }
@@ -513,8 +509,22 @@ struct SampleCreatorModule : virtual rack::Module,
         }
         break;
         case MULTISAMPLE:
-            pushError("Unsupported MultiFormat");
-            break;
+        {
+            auto fn = currentSampleDir / "multisample.xml";
+
+            multiFile = std::ofstream(fn);
+            if (!multiFile.is_open())
+            {
+                pushError("Failed to open output MultiFile");
+            }
+            else
+            {
+                auto nm = currentSampleDir.filename().replace_extension();
+                multiFile << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+                multiFile << "<multisample name=\"" << nm.u8string() << "\">\n" << std::flush;
+            }
+        }
+        break;
         }
     }
 
@@ -545,7 +555,12 @@ struct SampleCreatorModule : virtual rack::Module,
         }
         break;
         case MULTISAMPLE:
-            pushError("Unsupported MultiFormat");
+            if (multiFile.is_open())
+            {
+                multiFile << "</multisample>" << std::flush;
+                pushMessage("Closing multisample.xml File");
+                multiFile.close();
+            }
         }
     }
 
@@ -592,6 +607,30 @@ struct SampleCreatorModule : virtual rack::Module,
                           << " seqPosition=\"" << currentJob.roundRobinIndex + 1 << "\" ";
 
             multiFile << "/>\n";
+        }
+
+        case MULTISAMPLE:
+        {
+            if (!multiFile.is_open())
+                return;
+            multiFile << "    <sample file=\"wav/" << fn.filename().u8string() << "\" ";
+            if (currentJob.roundRobinOutOf > 1)
+                multiFile << " zone-logic=\"round-robin\" ";
+            multiFile << ">\n";
+
+            // <key root="40" tune="-50.22" track="1" low="24" high="40" low-fade="10"
+            // high-fade="0"/>
+            multiFile << "         <key "
+                      << "low=\"" << currentJob.noteFrom << "\" "
+                      << "high=\"" << currentJob.noteTo << "\" "
+                      << "root=\"" << currentJob.midiNote << "\" "
+                      << "/>\n";
+            multiFile << "         <velocity "
+
+                      << "low=\"" << currentJob.velFrom << "\" "
+                      << "high=\"" << currentJob.velTo << "\"/>\n";
+
+            multiFile << "    </sample>\n";
         }
         default:
             break;
@@ -711,8 +750,11 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = NEW_NOTE;
             currentJobIndex = -1;
 
-            // TODO: Set up multiple dir structores based on type (so like .multisample dir and
-            // stuff)
+            auto iv = (int)std::round(getParam(OUTPUT_FORMAT).getValue());
+            if (iv < JUST_WAV || iv > DECENT)
+                iv = JUST_WAV;
+            multiFormat = (MultiFormats)iv;
+
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
             currentSampleWavDir = currentSampleDir / "wav";

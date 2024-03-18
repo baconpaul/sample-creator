@@ -627,7 +627,7 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
     }
     void onButton(const ButtonEvent &e) override
     {
-        if (e.action == GLFW_PRESS && e.pos.x > box.size.x - buttonW)
+        if (e.action == GLFW_PRESS)
         {
             createContextMenu();
             e.consume(this);
