@@ -33,6 +33,9 @@ namespace fs = ghc::filesystem;
 #include <sst/rackhelpers/json.h>
 #include <sst/rackhelpers/neighbor_connectable.h>
 
+#include "RIFFWavWriter.hpp"
+#include "ZIPFileWriter.hpp"
+
 namespace baconpaul::samplecreator
 {
 static std::string midiNoteToName(int midiNote)
@@ -509,7 +512,7 @@ struct SampleCreatorModule : virtual rack::Module,
         break;
         case MULTISAMPLE:
         {
-            auto fn = currentSampleDir / "multisample.xml";
+            auto fn = currentSampleWavDir / "multisample.xml";
 
             multiFile = std::ofstream(fn);
             if (!multiFile.is_open())
@@ -559,6 +562,12 @@ struct SampleCreatorModule : virtual rack::Module,
                 multiFile << "</multisample>" << std::flush;
                 pushMessage("Closing multisample.xml File");
                 multiFile.close();
+
+                auto zf = (currentSampleDir / currentSampleDir.filename())
+                              .replace_extension(".multisample");
+
+                pushMessage("Creating zip : " + zf.u8string());
+                ziparchive::zipDirToOutputFrom(zf, currentSampleWavDir);
             }
         }
     }
@@ -613,7 +622,7 @@ struct SampleCreatorModule : virtual rack::Module,
         {
             if (!multiFile.is_open())
                 return;
-            multiFile << "    <sample file=\"wav/" << fn.filename().u8string() << "\" ";
+            multiFile << "    <sample file=\"" << fn.filename().u8string() << "\" ";
             if (currentJob.roundRobinOutOf > 1)
                 multiFile << " zone-logic=\"round-robin\" ";
             multiFile << " sample-start=\"0\" sample-stop=\"" << rw.getSampleCount() << "\" ";
@@ -756,6 +765,12 @@ struct SampleCreatorModule : virtual rack::Module,
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
             currentSampleWavDir = currentSampleDir / "wav";
+
+            if (multiFormat == MULTISAMPLE)
+            {
+                currentSampleWavDir = currentSampleDir / "raw";
+            }
+
             if (!testMode)
             {
                 try

@@ -4,8 +4,7 @@ Big swaths of work until there is though
 
 - Format Support
     - Do we want to store or write other sample metadata?
-    - Bitwig Sampler Format
-- UI
+    - UI
     - Double buffer keyboard
     - Light skin doesn't suck (and is objeyed in step() in the Skin)
     - Scroll bar on the log would be nice eh
@@ -18,5 +17,7 @@ Big swaths of work until there is though
     - Implement "Latency Mode" for when resampling host
     - Implement polyphonic rendering
     - SFZ won't load in tal sampler. Why?
+
+
 - Future Things
     - Decent Sampler could have a UI and Effects by default?
