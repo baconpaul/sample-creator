@@ -386,8 +386,7 @@ struct SampleCreatorModule : virtual rack::Module,
                         {
                             pushMessage(riffWavWriter.errMsg);
                         }
-                        sampleMultiFileAddCurrentJob(renderJobs[currentJobIndex],
-                                                     riffWavWriter.outPath);
+                        sampleMultiFileAddCurrentJob(renderJobs[oc->data], riffWavWriter);
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
@@ -564,8 +563,9 @@ struct SampleCreatorModule : virtual rack::Module,
         }
     }
 
-    void sampleMultiFileAddCurrentJob(const RenderJob &currentJob, const fs::path &fn)
+    void sampleMultiFileAddCurrentJob(const RenderJob &currentJob, const riffwav::RIFFWavWriter &rw)
     {
+        auto &fn = rw.outPath;
         switch (multiFormat)
         {
         case SFZ:
@@ -616,17 +616,15 @@ struct SampleCreatorModule : virtual rack::Module,
             multiFile << "    <sample file=\"wav/" << fn.filename().u8string() << "\" ";
             if (currentJob.roundRobinOutOf > 1)
                 multiFile << " zone-logic=\"round-robin\" ";
+            multiFile << " sample-start=\"0\" sample-stop=\"" << rw.getSampleCount() << "\" ";
             multiFile << ">\n";
 
-            // <key root="40" tune="-50.22" track="1" low="24" high="40" low-fade="10"
-            // high-fade="0"/>
             multiFile << "         <key "
                       << "low=\"" << currentJob.noteFrom << "\" "
                       << "high=\"" << currentJob.noteTo << "\" "
                       << "root=\"" << currentJob.midiNote << "\" "
                       << "/>\n";
             multiFile << "         <velocity "
-
                       << "low=\"" << currentJob.velFrom << "\" "
                       << "high=\"" << currentJob.velTo << "\"/>\n";
 
@@ -867,7 +865,7 @@ struct SampleCreatorModule : virtual rack::Module,
                     if (!testMode)
                     {
                         renderThreadCommands.push(
-                            RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, 0});
+                            RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, currentJobIndex});
                     }
                     clearVU();
                 }

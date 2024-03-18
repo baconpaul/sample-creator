@@ -185,6 +185,8 @@ struct RIFFWavWriter
         }
         return true;
     }
+
+    [[nodiscard]] size_t getSampleCount() const { return dataLen / (nChannels * sizeof(float)); }
 };
 } // namespace baconpaul::samplecreator::riffwav
 #endif // SAMPLECREATOR_RIFFWAVWRITER_HPP
