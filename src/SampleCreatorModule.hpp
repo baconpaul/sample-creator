@@ -311,7 +311,7 @@ struct SampleCreatorModule : virtual rack::Module,
         int velocity{90}, velFrom, velTo;
         int roundRobinIndex{0};
         int roundRobinOutOf{1};
-        float rrRand[2];
+        float rrRand[2]{0.f, 0.f};
     };
 
     std::vector<RenderJob> renderJobs;

@@ -38,7 +38,13 @@ struct RIFFWavWriter
     RIFFWavWriter() {}
 
     RIFFWavWriter(const fs::path &p, uint16_t chan) : outPath(p), nChannels(chan) {}
-    ~RIFFWavWriter() { closeFile(); }
+    ~RIFFWavWriter()
+    {
+        if (!closeFile())
+        {
+            // Unhandleable error here. Throwing is bad. Reporting is useless.
+        }
+    }
 
     void writeRIFFHeader()
     {
