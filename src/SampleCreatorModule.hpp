@@ -386,6 +386,8 @@ struct SampleCreatorModule : virtual rack::Module,
                         {
                             pushMessage(riffWavWriter.errMsg);
                         }
+                        sampleMultiFileAddCurrentJob(renderJobs[currentJobIndex],
+                                                     riffWavWriter.outPath);
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
@@ -429,8 +431,6 @@ struct SampleCreatorModule : virtual rack::Module,
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
                                          currentJob.noteTo, currentJob.velFrom, currentJob.velTo);
             riffWavWriter.startDataChunk();
-
-            sampleMultiFileAddCurrentJob(currentJob, fn);
         }
     }
 
@@ -608,7 +608,7 @@ struct SampleCreatorModule : virtual rack::Module,
 
             multiFile << "/>\n";
         }
-
+        break;
         case MULTISAMPLE:
         {
             if (!multiFile.is_open())
