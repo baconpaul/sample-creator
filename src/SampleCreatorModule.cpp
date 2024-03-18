@@ -874,12 +874,26 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         if (pt.empty())
         {
             pt = fs::path{rack::asset::userDir} / "SampleCreator";
-            fs::create_directories(pt);
+            try
+            {
+                fs::create_directories(pt);
+            }
+            catch (const fs::filesystem_error &e)
+            {
+                scm->pushError(e.what());
+            }
         }
         else
         {
             // Last time I was in "MySamples/Foo" and now I want to select somethign in MySamples
-            pt = pt.parent_path();
+            try
+            {
+                pt = pt.parent_path();
+            }
+            catch (const fs::filesystem_error &e)
+            {
+                // This is OK. It's just a hint to osdialog
+            }
         }
 
         char *path = osdialog_file(OSDIALOG_OPEN_DIR, pt.u8string().c_str(), "", NULL);

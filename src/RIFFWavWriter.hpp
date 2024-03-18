@@ -33,6 +33,8 @@ struct RIFFWavWriter
 
     uint16_t nChannels{2};
 
+    std::string errMsg{};
+
     RIFFWavWriter() {}
 
     RIFFWavWriter(const fs::path &p, uint16_t chan) : outPath(p), nChannels(chan) {}
@@ -81,14 +83,20 @@ struct RIFFWavWriter
 
     void pushSamples(float d[2])
     {
-        elementsWritten += fwrite(d, 1, nChannels * sizeof(float), outf);
-        dataLen += nChannels * sizeof(float);
+        if (outf)
+        {
+            elementsWritten += fwrite(d, 1, nChannels * sizeof(float), outf);
+            dataLen += nChannels * sizeof(float);
+        }
     }
 
     void pushInterleavedBlock(float *d, size_t nSamples)
     {
-        elementsWritten += fwrite(d, 1, nSamples * sizeof(float), outf);
-        dataLen += nSamples * sizeof(float);
+        if (outf)
+        {
+            elementsWritten += fwrite(d, 1, nSamples * sizeof(float), outf);
+            dataLen += nSamples * sizeof(float);
+        }
     }
 
     void pushc4(char a, char b, char c, char d)
@@ -96,45 +104,80 @@ struct RIFFWavWriter
         char f[4]{a, b, c, d};
         pushc4(f);
     }
-    void pushc4(char f[4]) { elementsWritten += fwrite(f, sizeof(char), 4, outf); }
+    void pushc4(char f[4])
+    {
+        if (outf)
+            elementsWritten += fwrite(f, sizeof(char), 4, outf);
+    }
 
     void pushi32(int32_t i)
     {
-        elementsWritten += std::fwrite(&i, sizeof(char), sizeof(uint32_t), outf);
+        if (outf)
+            elementsWritten += std::fwrite(&i, sizeof(char), sizeof(uint32_t), outf);
     }
 
-    void pushi16(int16_t i) { elementsWritten += fwrite(&i, sizeof(char), sizeof(uint16_t), outf); }
+    void pushi16(int16_t i)
+    {
+        if (outf)
+            elementsWritten += fwrite(&i, sizeof(char), sizeof(uint16_t), outf);
+    }
 
-    void pushi8(char i) { elementsWritten += std::fwrite(&i, 1, 1, outf); }
-    void openFile()
+    void pushi8(char i)
+    {
+        if (outf)
+            elementsWritten += std::fwrite(&i, 1, 1, outf);
+    }
+    [[nodiscard]] bool openFile()
     {
         elementsWritten = 0;
         dataLen = 0;
         dataSizeLocation = 0;
         fileSizeLocation = 0;
 
-        outf = fopen(outPath.u8string().c_str(), "wb");
-        // TODO deal with failed open
+        try
+        {
+            outf = fopen(outPath.u8string().c_str(), "wb");
+            if (!outf)
+            {
+                errMsg = "Unable to open '" + outPath.u8string() + "' for writing";
+                return false;
+            }
+        }
+        catch (const fs::filesystem_error &e)
+        {
+            outf = nullptr;
+            errMsg = e.what();
+            return false;
+        }
+        return true;
     }
-    void closeFile()
+
+    bool isOpen() { return outf != nullptr; }
+    [[nodiscard]] bool closeFile()
     {
         if (outf)
         {
-
             int res;
             res = std::fseek(outf, fileSizeLocation, SEEK_SET);
             if (res)
+            {
                 std::cout << "SEEK ZERO ERROR" << std::endl;
+                return false;
+            }
             int32_t chunklen = elementsWritten - 8; // minus riff and size
             fwrite(&chunklen, sizeof(uint32_t), 1, outf);
 
             res = std::fseek(outf, dataSizeLocation, SEEK_SET);
             if (res)
+            {
+                return false;
                 std::cout << "SEEK ONE ERROR" << std::endl;
+            }
             fwrite(&dataLen, sizeof(uint32_t), 1, outf);
             std::fclose(outf);
             outf = nullptr;
         }
+        return true;
     }
 };
 } // namespace baconpaul::samplecreator::riffwav

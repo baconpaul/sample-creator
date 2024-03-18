@@ -12,11 +12,6 @@ Big swaths of work until there is though
     - Scroll bar on the log would be nice eh
     - Path regino shows path better and has a better set button
     - An actual design! Lets hope Steve bites :)
-- Important Details
-    - Any error handling at all in the RIFF writer
-    - Try/Catch around all filesystem things
-    - A way to display errors on screen in the log as red text
-    - store the path used in the patch
 - Engine / Rendering
     - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
       half and add fades but controlling that is tricky

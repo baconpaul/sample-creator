@@ -373,7 +373,10 @@ struct SampleCreatorModule : virtual rack::Module,
                         renderThreadNewNote(oc->data, oc->data2);
                         break;
                     case RenderThreadCommand::CLOSE_FILE:
-                        riffWavWriter.closeFile();
+                        if (!riffWavWriter.closeFile())
+                        {
+                            pushMessage(riffWavWriter.errMsg);
+                        }
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
@@ -407,7 +410,11 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage(std::string("   - 32 bit ") + (nChannels == 2 ? "stereo" : "mono") + " @ " +
                         std::to_string(sr) + " sr");
             riffWavWriter = riffwav::RIFFWavWriter(fn, nChannels);
-            riffWavWriter.openFile();
+            auto opened = riffWavWriter.openFile();
+            if (!opened)
+            {
+                pushError(riffWavWriter.errMsg);
+            }
             riffWavWriter.writeRIFFHeader();
             riffWavWriter.writeFMTChunk(sr);
             riffWavWriter.writeINSTChunk(currentJob.midiNote, currentJob.noteFrom,
@@ -602,9 +609,16 @@ struct SampleCreatorModule : virtual rack::Module,
             currentSampleWavDir = currentSampleDir / "wav";
             if (!testMode)
             {
-                fs::create_directories(currentSampleDir);
-                fs::create_directories(currentSampleWavDir);
-                pushMessage("Output to '" + currentSampleDir.u8string() + "'");
+                try
+                {
+                    fs::create_directories(currentSampleDir);
+                    fs::create_directories(currentSampleWavDir);
+                    pushMessage("Output to '" + currentSampleDir.u8string() + "'");
+                }
+                catch (const fs::filesystem_error &e)
+                {
+                    pushError(std::string() + "Unable to create output directories : " + e.what());
+                }
             }
 
             populateRenderJobs(renderJobs);

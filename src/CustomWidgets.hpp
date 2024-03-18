@@ -475,6 +475,8 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
                 nvgStroke(vg);
             }
             break;
+            default:
+                break;
             }
         }
         else
