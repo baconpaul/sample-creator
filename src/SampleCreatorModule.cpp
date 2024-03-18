@@ -782,30 +782,58 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto rg = statusRegion;
             rg.size.x = rg.size.y;
 
-            auto add = [&rg, this](auto lab, auto onc) {
+            auto add = [&rg, this](auto lab, auto onc, auto en) {
                 auto ug = rg.shrink({margin, margin});
-                auto bt = SCPanelPushButton::create(ug.pos, ug.size, lab, onc);
+                auto bt = SCPanelPushButton::create(ug.pos, ug.size, lab, onc, en);
                 addChild(bt);
                 rg.pos.x += rg.size.x;
+                return bt;
             };
 
-            add("Test", [m]() {
-                if (m && m->createState == SampleCreatorModule::INACTIVE)
-                {
-                    m->testMode = true;
-                    m->startOperating = true;
-                }
-            });
-            add("Start", [m]() {
-                {
-                    m->testMode = false;
-                    m->startOperating = true;
-                }
-            });
-            add("Stop", [m]() {
-                if (m)
-                    m->stopImmediately = true;
-            });
+            add(
+                "Test",
+                [m]() {
+                    if (m && m->createState == SampleCreatorModule::INACTIVE)
+                    {
+                        m->testMode = true;
+                        m->startOperating = true;
+                    }
+                },
+                [m]() {
+                    if (m)
+                        return m->createState == SampleCreatorModule::INACTIVE;
+                    return true;
+                })
+                ->glyph = SCPanelPushButton::PLAY;
+
+            add(
+                "Start",
+                [m]() {
+                    if (m && m->createState == SampleCreatorModule::INACTIVE)
+                    {
+                        m->testMode = false;
+                        m->startOperating = true;
+                    }
+                },
+                [m]() {
+                    if (m)
+                        return m->createState == SampleCreatorModule::INACTIVE;
+                    return true;
+                })
+                ->glyph = SCPanelPushButton::RECORD;
+
+            add(
+                "Stop",
+                [m]() {
+                    if (m)
+                        m->stopImmediately = true;
+                },
+                [m]() {
+                    if (m)
+                        return m->createState != SampleCreatorModule::INACTIVE;
+                    return true;
+                })
+                ->glyph = SCPanelPushButton::STOP;
 
             rg.size.x = statusRegion.size.x - rg.pos.x;
             rg = rg.shrink({margin, margin});

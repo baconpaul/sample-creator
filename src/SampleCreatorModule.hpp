@@ -356,12 +356,7 @@ struct SampleCreatorModule : virtual rack::Module,
                     {
                         if (!testMode)
                         {
-                            auto bn = currentSampleDir.filename().replace_extension();
-                            auto fn = (currentSampleDir / bn.u8string()).replace_extension("sfz");
-                            pushMessage("Creating '" + fn.u8string() + "'");
-                            sfzFile = std::ofstream(fn);
-                            sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
-                            sfzFile << "<global>\n" << std::flush;
+                            sampleMultiFileStart();
                         }
                     }
                     break;
@@ -370,12 +365,7 @@ struct SampleCreatorModule : virtual rack::Module,
                         pushMessage("END RENDER");
                         if (!testMode)
                         {
-                            pushMessage("Closing SFZ File");
-                            if (sfzFile.is_open())
-                            {
-                                pushMessage("Which is open");
-                                sfzFile.close();
-                            }
+                            sampleMultiFileEnd();
                         }
                     }
                     break;
@@ -425,21 +415,7 @@ struct SampleCreatorModule : virtual rack::Module,
                                          currentJob.velTo);
             riffWavWriter.startDataChunk();
 
-            if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
-            {
-                sfzFile << "\n<group> "
-                        << " seq_length=" << currentJob.roundRobinOutOf << "\n"
-                        << std::flush;
-            }
-
-            sfzFile << "<region>";
-            if (currentJob.roundRobinOutOf > 1)
-                sfzFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
-            sfzFile << " sample=wav/" << fn.filename().u8string().c_str()
-                    << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo - 1
-                    << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
-                    << " hivel=" << currentJob.velTo << "\n"
-                    << std::flush;
+            sampleMultiFileAddCurrentJob(currentJob, fn);
         }
     }
 
@@ -466,6 +442,47 @@ struct SampleCreatorModule : virtual rack::Module,
             }
             riffWavWriter.pushInterleavedBlock(data, ioSampleBlockSize);
         }
+    }
+
+    /*
+     * These write the multifile (SFZ, BWS, Descent, etc...)
+     */
+    void sampleMultiFileStart()
+    {
+        auto bn = currentSampleDir.filename().replace_extension();
+        auto fn = (currentSampleDir / bn.u8string()).replace_extension("sfz");
+        pushMessage("Creating '" + fn.u8string() + "'");
+        sfzFile = std::ofstream(fn);
+        sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
+        sfzFile << "<global>\n" << std::flush;
+    }
+
+    void sampleMultiFileEnd()
+    {
+        pushMessage("Closing SFZ File");
+        if (sfzFile.is_open())
+        {
+            sfzFile.close();
+        }
+    }
+
+    void sampleMultiFileAddCurrentJob(const RenderJob &currentJob, const fs::path &fn)
+    {
+        if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
+        {
+            sfzFile << "\n<group> "
+                    << " seq_length=" << currentJob.roundRobinOutOf << "\n"
+                    << std::flush;
+        }
+
+        sfzFile << "<region>";
+        if (currentJob.roundRobinOutOf > 1)
+            sfzFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
+        sfzFile << " sample=wav/" << fn.filename().u8string().c_str()
+                << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo - 1
+                << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
+                << " hivel=" << currentJob.velTo << "\n"
+                << std::flush;
     }
 
     void populateRenderJobs(std::vector<RenderJob> &onto)
@@ -578,6 +595,8 @@ struct SampleCreatorModule : virtual rack::Module,
             createState = NEW_NOTE;
             currentJobIndex = -1;
 
+            // TODO: Set up multiple dir structores based on type (so like .multisample dir and
+            // stuff)
             if (currentSampleDir.empty())
                 currentSampleDir = fs::path{rack::asset::userDir} / "SampleCreator" / "Default";
             currentSampleWavDir = currentSampleDir / "wav";

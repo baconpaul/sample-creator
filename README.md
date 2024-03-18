@@ -5,11 +5,11 @@ Big swaths of work until there is though
 - Format Support
     - Do we want to store or write other sample metadata?
     - Bitwig Sampler Format
+    - Decent Basic + Decent FX
 - UI
     - Double buffer keyboard
     - Light skin doesn't suck (and is objeyed in step() in the Skin)
     - Scroll bar on the log would be nice eh
-    - Buttons get glyphs not text
     - Path regino shows path better and has a better set button
     - An actual design! Lets hope Steve bites :)
 - Important Details

@@ -361,16 +361,28 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
 
     std::string label;
     std::function<void()> onClick{nullptr};
+    std::function<bool()> isEnabled{nullptr};
     bool hover{false};
+    bool enabled{true};
 
-    static SCPanelPushButton *create(const rack::Vec &pos, const rack::Vec &size,
-                                     const std::string &label, std::function<void()> onClick)
+    enum GLYPH
+    {
+        NONE,
+        PLAY,
+        RECORD,
+        STOP
+    } glyph{NONE};
+
+    static SCPanelPushButton *create(
+        const rack::Vec &pos, const rack::Vec &size, const std::string &label,
+        std::function<void()> onClick, std::function<bool()> isEnabled = []() { return true; })
     {
         auto res = new SCPanelPushButton();
         res->box.pos = pos;
         res->box.size = size;
         res->label = label;
         res->onClick = onClick;
+        res->isEnabled = isEnabled;
 
         res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), size, [res](auto a) { res->drawButton(a); });
@@ -385,22 +397,97 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
         nvgRoundedRect(vg, 0, 0, box.size.x, box.size.y, 2);
         nvgStrokeColor(vg, sampleCreatorSkin.paramDisplayBorder());
         nvgFillPaint(
-            vg, nvgLinearGradient(vg, 0, 0, 0, box.size.y,
-                                  lighten(sampleCreatorSkin.pushButtonFill(), 1.4),
-                                  lighten(sampleCreatorSkin.pushButtonFill(), hover ? 1.2 : 1.0)));
+            vg, nvgLinearGradient(
+                    vg, 0, 0, 0, box.size.y,
+                    lighten(sampleCreatorSkin.pushButtonFill(), enabled ? 1.4 : 1.1),
+                    lighten(sampleCreatorSkin.pushButtonFill(), hover && enabled ? 1.2 : 1.0)));
         nvgFill(vg);
         nvgStroke(vg);
 
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
-        nvgBeginPath(vg);
-        nvgFillColor(vg, hover ? sampleCreatorSkin.pushButtonHoverText()
-                               : sampleCreatorSkin.pushButtonText());
-        nvgFontFaceId(vg, fid);
-        nvgFontSize(vg, 12);
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+        if (glyph != NONE)
+        {
+            switch (glyph)
+            {
+            case PLAY:
+            {
+                auto shx = 0.32;
+                auto shy = 0.31;
+                nvgBeginPath(vg);
+                if (enabled)
+                {
+                    nvgFillColor(vg, nvgRGBA(20, 240, 20, hover ? 150 : 100));
+                    nvgStrokeColor(vg, nvgRGB(20, 240, 20));
+                }
+                else
+                {
+                    nvgFillColor(vg, nvgRGBA(20, 20, 20, 20));
+                    nvgStrokeColor(vg, nvgRGBA(20, 20, 20, 35));
+                }
+                nvgMoveTo(vg, box.size.x * shx, box.size.y * shy);
+                nvgLineTo(vg, box.size.x * (1 - shx), box.size.y * 0.5);
+                nvgLineTo(vg, box.size.x * shx, box.size.y * (1 - shy));
+                nvgClosePath(vg);
 
-        nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+                nvgFill(vg);
+                nvgStroke(vg);
+            }
+            break;
+            case STOP:
+            {
+                auto shr = 0.3;
+                nvgBeginPath(vg);
+                if (enabled)
+                {
+                    nvgFillColor(vg, nvgRGBA(180, 180, 180, hover ? 150 : 100));
+                    nvgStrokeColor(vg, nvgRGB(20, 20, 20));
+                }
+                else
+                {
+                    nvgFillColor(vg, nvgRGBA(20, 20, 20, 20));
+                    nvgStrokeColor(vg, nvgRGBA(20, 20, 20, 35));
+                }
+                nvgRect(vg, box.size.x * shr, box.size.y * shr, box.size.x * (1 - 2 * shr),
+                        box.size.y * (1 - 2 * shr));
+                nvgFill(vg);
+                nvgStroke(vg);
+            }
+            break;
+            case RECORD:
+            {
+                auto shr = 0.20;
+                nvgBeginPath(vg);
+                if (enabled)
+                {
+                    nvgFillColor(vg, nvgRGBA(240, 20, 20, hover ? 150 : 100));
+                    nvgStrokeColor(vg, nvgRGB(240, 20, 20));
+                }
+                else
+                {
+                    nvgFillColor(vg, nvgRGBA(20, 20, 20, 20));
+                    nvgStrokeColor(vg, nvgRGBA(20, 20, 20, 35));
+                }
+                nvgEllipse(vg, box.size.x * 0.5, box.size.y * 0.5, box.size.x * shr,
+                           box.size.y * shr);
+
+                nvgFill(vg);
+                nvgStroke(vg);
+            }
+            break;
+            }
+        }
+        else
+        {
+            nvgBeginPath(vg);
+            nvgFillColor(vg, hover ? sampleCreatorSkin.pushButtonHoverText()
+                                   : sampleCreatorSkin.pushButtonText());
+            nvgFontFaceId(vg, fid);
+            nvgFontSize(vg, 12);
+            nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+            nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+        }
     }
 
     void onButton(const ButtonEvent &e) override
@@ -429,6 +516,20 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
     {
         if (bdw)
             bdw->dirty = true;
+    }
+
+    void step() override
+    {
+        if (isEnabled)
+        {
+            auto lie = isEnabled();
+            if (lie != enabled)
+            {
+                bdw->dirty = true;
+            }
+            enabled = lie;
+        }
+        rack::Widget::step();
     }
 };
 
