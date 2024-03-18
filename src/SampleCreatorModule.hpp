@@ -138,6 +138,14 @@ struct SampleCreatorModule : virtual rack::Module,
         NUM_LIGHTS
     };
 
+    enum MultiFormats
+    {
+        JUST_WAV,
+        SFZ,
+        MULTISAMPLE,
+        DECENT // few places below we assume DECENT is end, configParam and setting in startRender
+    } multiFormat{SFZ};
+
     SampleCreatorModule()
     {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -182,7 +190,8 @@ struct SampleCreatorModule : virtual rack::Module,
         configSwitch(VELOCITY_STRATEGY, 0, 2, 1, "Velocity Strategy",
                      {"Uniform", "Sqrt", "Square"});
 
-        configSwitch(OUTPUT_FORMAT, 0, 2, 1, "Output Format", {"Just WAV", "SFZ", "MultiSample"});
+        configSwitch(OUTPUT_FORMAT, JUST_WAV, DECENT, SFZ, "Output Format",
+                     {"Just WAV", "SFZ", "MultiSample", "Decent"});
 
         renderThread = std::make_unique<std::thread>([this]() { renderThreadProcess(); });
 
@@ -291,7 +300,7 @@ struct SampleCreatorModule : virtual rack::Module,
     fs::path currentSampleDir{}, currentSampleWavDir{};
 
     riffwav::RIFFWavWriter riffWavWriter;
-    std::ofstream sfzFile;
+    std::ofstream multiFile;
 
     std::atomic<bool> testMode{false};
     std::atomic<bool> startOperating{false};
@@ -356,6 +365,10 @@ struct SampleCreatorModule : virtual rack::Module,
                     {
                         if (!testMode)
                         {
+                            auto iv = (int)std::round(getParam(OUTPUT_FORMAT).getValue());
+                            if (iv < JUST_WAV || iv > DECENT)
+                                iv = JUST_WAV;
+                            multiFormat = (MultiFormats)iv;
                             sampleMultiFileStart();
                         }
                     }
@@ -455,40 +468,85 @@ struct SampleCreatorModule : virtual rack::Module,
      */
     void sampleMultiFileStart()
     {
-        auto bn = currentSampleDir.filename().replace_extension();
-        auto fn = (currentSampleDir / bn.u8string()).replace_extension("sfz");
-        pushMessage("Creating '" + fn.u8string() + "'");
-        sfzFile = std::ofstream(fn);
-        sfzFile << "// Basic SFZ File from Rack Sample Creator\n\n";
-        sfzFile << "<global>\n" << std::flush;
+        switch (multiFormat)
+        {
+        case JUST_WAV:
+            pushMessage("Wav Files Only - no multi-sample format created");
+            break;
+        case SFZ:
+        {
+            auto bn = currentSampleDir.filename().replace_extension();
+            auto fn = (currentSampleDir / bn.u8string()).replace_extension("sfz");
+            pushMessage("MultiFile Format: SFZ");
+            pushMessage("   - '" + fn.filename().u8string() + "'");
+            multiFile = std::ofstream(fn);
+            if (!multiFile.is_open())
+            {
+                pushError("Failed to open output MultiFile");
+            }
+            else
+            {
+                multiFile << "// Basic SFZ File from Rack Sample Creator\n\n";
+                multiFile << "<global>\n" << std::flush;
+            }
+        }
+        break;
+        case DECENT:
+        case MULTISAMPLE:
+            pushError("Unsupported MultiFormat");
+            break;
+        }
     }
 
     void sampleMultiFileEnd()
     {
-        pushMessage("Closing SFZ File");
-        if (sfzFile.is_open())
+        switch (multiFormat)
         {
-            sfzFile.close();
+        case JUST_WAV:
+            break;
+        case SFZ:
+        {
+            if (multiFile.is_open())
+            {
+                pushMessage("Closing SFZ File");
+                multiFile.close();
+            }
+        }
+        break;
+        case DECENT:
+        case MULTISAMPLE:
+            pushError("Unsupported MultiFormat");
         }
     }
 
     void sampleMultiFileAddCurrentJob(const RenderJob &currentJob, const fs::path &fn)
     {
-        if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
+        switch (multiFormat)
         {
-            sfzFile << "\n<group> "
-                    << " seq_length=" << currentJob.roundRobinOutOf << "\n"
-                    << std::flush;
-        }
+        case SFZ:
+        {
+            if (!multiFile.is_open())
+                return;
 
-        sfzFile << "<region>";
-        if (currentJob.roundRobinOutOf > 1)
-            sfzFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
-        sfzFile << " sample=wav/" << fn.filename().u8string().c_str()
-                << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo
-                << " pitch_keycenter=" << currentJob.midiNote << " lovel=" << currentJob.velFrom
-                << " hivel=" << currentJob.velTo << "\n"
-                << std::flush;
+            if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
+            {
+                multiFile << "\n<group> "
+                          << " seq_length=" << currentJob.roundRobinOutOf << "\n"
+                          << std::flush;
+            }
+
+            multiFile << "<region>";
+            if (currentJob.roundRobinOutOf > 1)
+                multiFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
+            multiFile << " sample=wav/" << fn.filename().u8string().c_str()
+                      << " lokey=" << currentJob.noteFrom << " hikey=" << currentJob.noteTo
+                      << " pitch_keycenter=" << currentJob.midiNote
+                      << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo << "\n"
+                      << std::flush;
+        }
+        default:
+            break;
+        }
     }
 
     void populateRenderJobs(std::vector<RenderJob> &onto)
