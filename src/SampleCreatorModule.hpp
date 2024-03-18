@@ -492,6 +492,26 @@ struct SampleCreatorModule : virtual rack::Module,
         }
         break;
         case DECENT:
+        {
+            auto bn = currentSampleDir.filename().replace_extension();
+            auto fn = (currentSampleDir / bn.u8string()).replace_extension("dspreset");
+            pushMessage("MultiFile Format: Decent Sampler");
+            pushMessage("   - '" + fn.filename().u8string() + "'");
+            multiFile = std::ofstream(fn);
+            if (!multiFile.is_open())
+            {
+                pushError("Failed to open output MultiFile");
+            }
+            else
+            {
+                multiFile << "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+                multiFile << "<DecentSampler minVersion=\"1.0.0\">\n"
+                          << "  <groups>\n"
+                          << "    <group>\n"
+                          << std::flush;
+            }
+        }
+        break;
         case MULTISAMPLE:
             pushError("Unsupported MultiFormat");
             break;
@@ -514,6 +534,16 @@ struct SampleCreatorModule : virtual rack::Module,
         }
         break;
         case DECENT:
+        {
+            if (multiFile.is_open())
+            {
+                multiFile << "   </group>\n  </groups>\n";
+                multiFile << "</DecentSampler>" << std::flush;
+                pushMessage("Closing .dspreset File");
+                multiFile.close();
+            }
+        }
+        break;
         case MULTISAMPLE:
             pushError("Unsupported MultiFormat");
         }
@@ -543,6 +573,25 @@ struct SampleCreatorModule : virtual rack::Module,
                       << " pitch_keycenter=" << currentJob.midiNote
                       << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo << "\n"
                       << std::flush;
+        }
+        case DECENT:
+        {
+            if (!multiFile.is_open())
+                return;
+            multiFile << "    <sample ";
+            multiFile << "path=\"wav/" << fn.filename().u8string().c_str() << "\" "
+                      << "loNote=\"" << currentJob.noteFrom << "\" "
+                      << "hiNote=\"" << currentJob.noteTo << "\" "
+                      << "rootNote=\"" << currentJob.midiNote << "\" "
+                      << "loVel=\"" << currentJob.velFrom << "\" "
+                      << "hiVel=\"" << currentJob.velTo << "\" " << std::flush;
+
+            if (currentJob.roundRobinOutOf > 1)
+                multiFile << " seqMode=\"round_robin\" seqLength=\"" << currentJob.roundRobinOutOf
+                          << "\" "
+                          << " seqPosition=\"" << currentJob.roundRobinIndex + 1 << "\" ";
+
+            multiFile << "/>\n";
         }
         default:
             break;
