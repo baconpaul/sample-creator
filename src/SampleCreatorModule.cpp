@@ -350,7 +350,7 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         }
         // round to octave
         sn = (sn / 12) * 12;
-        en = ((en + 12) / 12) * 12;
+        en = ((en + 11) / 12) * 12 + 1;
 
         repaint();
     }
