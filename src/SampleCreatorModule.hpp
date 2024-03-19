@@ -311,7 +311,11 @@ struct SampleCreatorModule : virtual rack::Module,
 
     std::array<std::atomic<float>, 2> vuLevels{0, 0};
 
-    uint64_t gateSamples;
+    uint64_t gateSamples{0};
+    uint64_t latencySamples{0};
+
+    uint64_t gateInitValue{0};
+    uint64_t latencyInitValue{0};
 
     static constexpr int silenceSamples{4096};
     int silencePosition;
@@ -756,6 +760,8 @@ struct SampleCreatorModule : virtual rack::Module,
             startOperating = false;
             createState = NEW_NOTE;
             currentJobIndex = -1;
+            latencyInitValue = std::round(getParam(LATENCY_COMPENSATION).getValue());
+            gateInitValue = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
 
             auto iv = (int)std::round(getParam(OUTPUT_FORMAT).getValue());
             if (iv < JUST_WAV || iv > DECENT)
@@ -808,8 +814,10 @@ struct SampleCreatorModule : virtual rack::Module,
                            " " + midiNoteToName(jbn),
                        1);
             playbackPos = 0;
-            gateSamples = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
             createState = GATED_RECORD;
+
+            latencySamples = latencyInitValue;
+            gateSamples = gateInitValue;
 
             renderThreadCommands.push(RenderThreadCommand{
                 RenderThreadCommand::NEW_NOTE, currentJobIndex, (int64_t)args.sampleRate});
@@ -889,19 +897,24 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (createState != SPINDOWN_BUFFER)
         {
-            auto &f2 = ioBlocks[ioWriteBlock][ioWritePosition];
-            f2[0] = inputs[INPUT_L].getVoltage() / 5.f;
-            f2[1] = inputs[INPUT_R].getVoltage() / 5.f;
-
-            ioWritePosition = (ioWritePosition + 1) & (ioSampleBlockSize - 1);
-            // Insanely inefficient. We need to block this into a better chunk and send a chunk
-            // index And when we do that we can shrink the queue again
-            if (ioWritePosition == 0)
+            if (latencySamples == 0)
             {
-                renderThreadCommands.push(
-                    RenderThreadCommand{RenderThreadCommand::PUSH_SAMPLES, ioWriteBlock});
-                ioWriteBlock = (ioWriteBlock + 1) & (ioSampleBlocksAvailable - 1);
+                auto &f2 = ioBlocks[ioWriteBlock][ioWritePosition];
+                f2[0] = inputs[INPUT_L].getVoltage() / 5.f;
+                f2[1] = inputs[INPUT_R].getVoltage() / 5.f;
+
+                ioWritePosition = (ioWritePosition + 1) & (ioSampleBlockSize - 1);
+                // Insanely inefficient. We need to block this into a better chunk and send a chunk
+                // index And when we do that we can shrink the queue again
+                if (ioWritePosition == 0)
+                {
+                    renderThreadCommands.push(
+                        RenderThreadCommand{RenderThreadCommand::PUSH_SAMPLES, ioWriteBlock});
+                    ioWriteBlock = (ioWriteBlock + 1) & (ioSampleBlocksAvailable - 1);
+                }
             }
+            if (latencySamples > 0)
+                latencySamples--;
         }
 
         if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
