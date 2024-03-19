@@ -358,6 +358,7 @@ struct SCPanelParamDisplay : rack::ui::TextField, SampleCreatorSkin::Client
 struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
 {
     sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdwLayer{nullptr};
 
     std::string label;
     std::function<void()> onClick{nullptr};
@@ -387,6 +388,9 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
         res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), size, [res](auto a) { res->drawButton(a); });
         res->addChild(res->bdw);
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawButtonLayer(a); });
+        res->addChild(res->bdwLayer);
         return res;
     }
 
@@ -403,7 +407,9 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
                     lighten(sampleCreatorSkin.pushButtonFill(), hover && enabled ? 1.2 : 1.0)));
         nvgFill(vg);
         nvgStroke(vg);
-
+    }
+    void drawButtonLayer(NVGcontext *vg)
+    {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
         if (glyph != NONE)
@@ -503,22 +509,28 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
             }
         }
     }
+
+    void repaint()
+    {
+        if (bdw && bdwLayer)
+        {
+            bdw->dirty = true;
+            bdwLayer->dirty = true;
+        }
+    }
+
     void onHover(const HoverEvent &e) override { e.consume(this); }
     void onEnter(const EnterEvent &e) override
     {
         hover = true;
-        bdw->dirty = true;
+        repaint();
     }
     void onLeave(const LeaveEvent &e) override
     {
         hover = false;
-        bdw->dirty = true;
+        repaint();
     }
-    void onSkinChanged() override
-    {
-        if (bdw)
-            bdw->dirty = true;
-    }
+    void onSkinChanged() override { repaint(); }
 
     void step() override
     {
@@ -527,7 +539,7 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
             auto lie = isEnabled();
             if (lie != enabled)
             {
-                bdw->dirty = true;
+                repaint();
             }
             enabled = lie;
         }
@@ -537,7 +549,7 @@ struct SCPanelPushButton : rack::Widget, SampleCreatorSkin::Client
 
 struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
 {
-    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr};
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
 
     std::function<void()> onClick{nullptr};
     bool hover{false};
@@ -553,6 +565,11 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
         res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
             rack::Vec(0, 0), size, [res](auto a) { res->drawDropdown(a); });
         res->addChild(res->bdw);
+
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
+            rack::Vec(0, 0), size, [res](auto a) { res->drawDropdownLayer(a); });
+        res->addChild(res->bdwLayer);
+
         return res;
     }
 
@@ -581,21 +598,6 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
         nvgStroke(vg);
         nvgRestore(vg);
 
-        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
-
-        nvgBeginPath(vg);
-        nvgFillColor(vg, sampleCreatorSkin.paramDisplayText());
-        nvgFontFaceId(vg, fid);
-        nvgFontSize(vg, 12);
-        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
-
-        auto label = std::string("");
-        if (getParamQuantity())
-        {
-            label = getParamQuantity()->getDisplayValueString();
-        }
-        nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
-
         auto cl = rack::Vec(0, 0);
         cl.x += box.size.x - buttonW / 2;
         cl.y += box.size.y / 2;
@@ -612,6 +614,23 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
         nvgFill(vg);
     }
 
+    void drawDropdownLayer(NVGcontext *vg)
+    {
+        auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
+        nvgBeginPath(vg);
+        nvgFillColor(vg, sampleCreatorSkin.paramDisplayText());
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 12);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_MIDDLE);
+
+        auto label = std::string("");
+        if (getParamQuantity())
+        {
+            label = getParamQuantity()->getDisplayValueString();
+        }
+        nvgText(vg, 3, box.size.y * 0.5, label.c_str(), nullptr);
+    }
+
     std::string labelCache{};
     void step() override
     {
@@ -621,6 +640,7 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
             {
                 labelCache = getParamQuantity()->getDisplayValueString();
                 bdw->dirty = true;
+                bdwLayer->dirty = true;
             }
         }
         rack::ParamWidget::step();
@@ -642,16 +662,21 @@ struct SCPanelDropDown : rack::ParamWidget, SampleCreatorSkin::Client
     {
         hover = true;
         bdw->dirty = true;
+        bdwLayer->dirty = true;
     }
     void onLeave(const LeaveEvent &e) override
     {
         hover = false;
         bdw->dirty = true;
+        bdwLayer->dirty = true;
     }
     void onSkinChanged() override
     {
         if (bdw)
+        {
             bdw->dirty = true;
+            bdwLayer->dirty = true;
+        }
     }
 };
 

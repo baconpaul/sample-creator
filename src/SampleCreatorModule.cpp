@@ -63,6 +63,21 @@ struct SampleCreatorLogWidget : rack::Widget, SampleCreatorSkin::Client
     {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
+        if (!module)
+        {
+            nvgBeginPath(vg);
+            nvgBeginPath(vg);
+            nvgFillColor(vg, sampleCreatorSkin.logText());
+
+            nvgTextAlign(vg, NVG_ALIGN_CENTER | NVG_ALIGN_MIDDLE);
+            nvgFontFaceId(vg, fid);
+            nvgFontSize(vg, 50);
+
+            nvgText(vg, box.size.x * 0.5, box.size.y * 0.35, "Sample", nullptr);
+            nvgText(vg, box.size.x * 0.5, box.size.y * 0.65, "Creator", nullptr);
+            return;
+        }
+
         float x = 2, y = 2;
         for (auto m : msgDeq)
         {
@@ -229,7 +244,7 @@ struct SampleCreatorPathWidget : rack::Widget, SampleCreatorSkin::Client
         res->addChild(res->bdw);
 
         res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidgetOnLayer(
-            rack::Vec(0, 0), size, [res](auto vg) { res->drawStatus(vg); });
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawPath(vg); });
         res->addChild(res->bdwLayer);
 
         return res;
@@ -246,20 +261,29 @@ struct SampleCreatorPathWidget : rack::Widget, SampleCreatorSkin::Client
         nvgStroke(vg);
     }
 
-    void drawStatus(NVGcontext *vg)
+    void drawPath(NVGcontext *vg)
     {
         auto fid = APP->window->loadFont(sampleCreatorSkin.fontPath)->handle;
 
+        auto ppath = cacheModulePath.parent_path();
+        auto c = sampleCreatorSkin.logText();
+        nvgBeginPath(vg);
+        nvgFillColor(vg, c);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
+        nvgFontFaceId(vg, fid);
+        nvgFontSize(vg, 12);
+
+        nvgText(vg, 2, 2, ppath.u8string().c_str(), nullptr);
+
         nvgBeginPath(vg);
         nvgFillColor(vg, sampleCreatorSkin.logText());
-        nvgTextAlign(vg, NVG_ALIGN_RIGHT | NVG_ALIGN_TOP);
+        nvgTextAlign(vg, NVG_ALIGN_LEFT | NVG_ALIGN_TOP);
         nvgFontFaceId(vg, fid);
-        nvgFontSize(vg, 14);
+        nvgFontSize(vg, 22);
 
-        nvgText(vg, box.size.x - 2, 2, path.c_str(), nullptr);
+        nvgText(vg, 2, 15, cacheModulePath.filename().u8string().c_str(), nullptr);
     }
 
-    std::string path;
     fs::path cacheModulePath;
     void step() override
     {
@@ -268,7 +292,6 @@ struct SampleCreatorPathWidget : rack::Widget, SampleCreatorSkin::Client
             if (cacheModulePath != module->currentSampleDir)
             {
                 cacheModulePath = module->currentSampleDir;
-                path = cacheModulePath.u8string();
                 bdw->dirty = true;
                 bdwLayer->dirty = true;
             }
@@ -292,6 +315,7 @@ struct SampleCreatorPathWidget : rack::Widget, SampleCreatorSkin::Client
 struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 {
     SampleCreatorModule *module{nullptr};
+    sst::rackhelpers::ui::BufferedDrawFunctionWidget *bdw{nullptr}, *bdwLayer{nullptr};
 
     static SampleCreatorJobsKeyboard *create(const rack::Vec &pos, const rack::Vec &size,
                                              SampleCreatorModule *m)
@@ -300,6 +324,14 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         res->box.size = size;
         res->box.pos = pos;
         res->module = m;
+
+        res->bdw = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawBackground(vg); });
+        res->addChild(res->bdw);
+
+        res->bdwLayer = new sst::rackhelpers::ui::BufferedDrawFunctionWidget(
+            rack::Vec(0, 0), size, [res](auto vg) { res->drawCurrentJob(vg); });
+        res->addChild(res->bdwLayer);
 
         return res;
     }
@@ -319,6 +351,8 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         // round to octave
         sn = (sn / 12) * 12;
         en = ((en + 11) / 12) * 12;
+
+        repaint();
     }
 
     void drawKeyboard(NVGcontext *vg)
@@ -387,10 +421,8 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         }
     }
 
-    void draw(const DrawArgs &args) override
+    void drawBackground(NVGcontext *vg)
     {
-        auto vg = args.vg;
-
         drawKeyboard(vg);
 
         auto mks = box.size.x / (en - sn);
@@ -438,51 +470,70 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
         }
     }
 
-    void drawLayer(const DrawArgs &args, int layer) override
+    void drawCurrentJob(NVGcontext *vg)
     {
-        if (layer == 1)
+        auto mks = box.size.x / (en - sn);
+        auto vls = box.size.y / 128.0;
+
+        auto idx = 0;
+        auto cji = -1;
+        if (module)
         {
-            auto vg = args.vg;
-            auto mks = box.size.x / (en - sn);
-            auto vls = box.size.y / 128.0;
+            cji = module->currentJobIndex;
+        }
+        for (auto j : jobs)
+        {
+            auto mn = (j.midiNote - sn) * mks;
+            auto ve = (127 - j.velocity) * vls;
 
-            auto idx = 0;
-            auto cji = -1;
-            if (module)
+            auto xs = (j.noteFrom - sn) * mks;
+            auto xe = (j.noteTo + 1 - sn) * mks;
+            auto ys = (127 - j.velTo) * vls;
+            auto ye = (127 - j.velFrom) * vls;
+
+            if (idx == cji)
             {
-                cji = module->currentJobIndex;
-            }
-            for (auto j : jobs)
-            {
-                auto mn = (j.midiNote - sn) * mks;
-                auto ve = (127 - j.velocity) * vls;
-
-                auto xs = (j.noteFrom - sn) * mks;
-                auto xe = (j.noteTo + 1 - sn) * mks;
-                auto ys = (127 - j.velTo) * vls;
-                auto ye = (127 - j.velFrom) * vls;
-
-                if (idx == cji)
-                {
-                    nvgStrokeColor(vg, nvgRGB(220, 220, 255));
-                    nvgFillColor(vg, nvgRGBA(220, 220, 255, 200));
-
-                    nvgBeginPath(vg);
-                    nvgRect(vg, xs, ys, xe - xs, ye - ys);
-                    nvgFill(vg);
-                    nvgStroke(vg);
-                }
-                idx++;
+                nvgStrokeColor(vg, nvgRGB(220, 220, 255));
+                nvgFillColor(vg, nvgRGBA(220, 220, 255, 200));
 
                 nvgBeginPath(vg);
-                nvgStrokeColor(vg, nvgRGB(255, 255, 0));
-                nvgEllipse(vg, mn + mks * 0.5, ve, 1, 1);
+                nvgRect(vg, xs, ys, xe - xs, ye - ys);
+                nvgFill(vg);
                 nvgStroke(vg);
             }
+            idx++;
+
+            nvgBeginPath(vg);
+            nvgStrokeColor(vg, nvgRGB(255, 255, 0));
+            nvgEllipse(vg, mn + mks * 0.5, ve, 1, 1);
+            nvgStroke(vg);
         }
     }
 
-    void onSkinChanged() override {}
+    int currentIndexCache{-1};
+
+    void step() override
+    {
+        if (module)
+        {
+            if (currentIndexCache != module->currentJobIndex)
+            {
+                repaint();
+            }
+            currentIndexCache = module->currentJobIndex;
+        }
+        rack::Widget::step();
+    }
+
+    void repaint()
+    {
+        if (bdw)
+            bdw->dirty = true;
+        if (bdwLayer)
+            bdwLayer->dirty = true;
+    }
+
+    void onSkinChanged() override { repaint(); }
 };
 
 struct SampleCreatorVU : rack::Widget, SampleCreatorSkin::Client
@@ -775,7 +826,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             pWithK(sw, M::POLYPHONY);
         }
 
-        auto log = SampleCreatorLogWidget::create(logRegion.pos, logRegion.size, m);
+        auto lr = logRegion.shrink({margin, 0});
+        auto log = SampleCreatorLogWidget::create(lr.pos, lr.size, m);
         addChild(log);
 
         {
@@ -835,8 +887,9 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
                 })
                 ->glyph = SCPanelPushButton::STOP;
 
-            rg.size.x = statusRegion.size.x - rg.pos.x;
+            rg.size.x = statusRegion.size.x - rg.pos.x + margin;
             rg = rg.shrink({margin, margin});
+
             addChild(SampleCreatorStatusWidget::create(rg.pos, rg.size, m));
         }
 
@@ -844,21 +897,20 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
             auto ug = pathRegion.shrink({margin, margin});
             auto pathDisp = ug;
             auto pathCtrl = ug;
-            pathDisp.size.y = 22;
-            pathCtrl.size.y -= 22;
-            pathCtrl.pos.y += 22;
+            pathDisp.size.y = 41;
+            pathCtrl.size.y -= 42 + margin;
+            pathCtrl.pos.y += 42 + margin;
 
             addChild(SampleCreatorPathWidget::create(pathDisp.pos, pathDisp.size, m));
 
-            pathCtrl.size.x = pathCtrl.size.x * 0.5;
-            auto bt = SCPanelPushButton::create(pathCtrl.shrink({margin, margin}).pos,
-                                                pathCtrl.shrink({margin, margin}).size, "Set Path",
+            pathCtrl.size.x = pathCtrl.size.x * 0.25;
+            auto bt = SCPanelPushButton::create(pathCtrl.pos, pathCtrl.size, "Set Path",
                                                 [this]() { selectPath(); });
             addChild(bt);
-            pathCtrl.pos.x += pathCtrl.size.x;
-            addChild(SCPanelDropDown::create(pathCtrl.shrink({margin, margin}).pos,
-                                             pathCtrl.shrink({margin, margin}).size, m,
-                                             M::OUTPUT_FORMAT));
+            pathCtrl.pos.x += pathCtrl.size.x + 2 * margin;
+            pathCtrl.size.x *= 3;
+            pathCtrl.size.x -= 2 * margin;
+            addChild(SCPanelDropDown::create(pathCtrl.pos, pathCtrl.size, m, M::OUTPUT_FORMAT));
         }
     }
 
@@ -885,7 +937,8 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         }
         else
         {
-            // Last time I was in "MySamples/Foo" and now I want to select somethign in MySamples
+            // Last time I was in "MySamples/Foo" and now I want to select somethign in
+            // MySamples
             try
             {
                 pt = pt.parent_path();
@@ -935,12 +988,13 @@ struct SampleCreatorModuleWidget : rack::ModuleWidget, SampleCreatorSkin::Client
         rangeRegion = rack::Rect(controlsXSplit, keyboardYEnd, box.size.x - controlsXSplit,
                                  controlsYEnd - keyboardYEnd)
                           .grow({-margin, -margin});
-        logRegion = rack::Rect(0, regionHeight * 0.5, controlsXSplit, regionHeight * 0.5)
+        logRegion = rack::Rect(0, regionHeight * 0.505, controlsXSplit, regionHeight * 0.495)
                         .grow({-margin, -margin});
-        statusRegion = rack::Rect(0, keyboardYEnd, controlsXSplit, regionHeight * 0.13)
-                           .grow({-margin, -margin});
+        statusRegion =
+            rack::Rect(0, keyboardYEnd, controlsXSplit, regionHeight * 0.13).grow({-margin, 0});
         pathRegion = statusRegion;
         pathRegion.pos.y += pathRegion.size.y;
+        pathRegion.size.y += 17;
     }
 
     void drawBG(NVGcontext *vg)

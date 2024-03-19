@@ -6,10 +6,9 @@ Big swaths of work until there is though
     - Do we want to store or write other sample metadata?
 
 - UI
-    - Double buffer keyboard
     - Light skin doesn't suck (and is objeyed in step() in the Skin)
+  
     - Scroll bar on the log would be nice eh
-    - Path regino shows path better and has a better set button
     - An actual design! Lets hope Steve bites :)
     - Range and Latency and so on controls freeze while rendering
 

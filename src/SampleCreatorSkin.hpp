@@ -112,8 +112,8 @@ struct SampleCreatorSkin
     COL(paramDisplayText, nvgRGB(0xFF, 0x90, 0x00), nvgRGB(0xFF, 0x90, 0x00));
 
     COL(pushButtonFill, nvgRGB(90, 90, 100), nvgRGB(90, 90, 100));
-    COL(pushButtonText, nvgRGB(50, 50, 60), nvgRGB(50, 50, 60));
-    COL(pushButtonHoverText, nvgRGB(210, 210, 220), nvgRGB(210, 210, 220));
+    COL(pushButtonText, nvgRGB(210, 210, 210), nvgRGB(50, 50, 60));
+    COL(pushButtonHoverText, nvgRGB(240, 240, 245), nvgRGB(210, 210, 220));
 
     COL(logText, nvgRGB(20, 240, 20), nvgRGB(20, 240, 20));
     COL(logErrorText, nvgRGB(240, 20, 20), nvgRGB(240, 20, 20));
