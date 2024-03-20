@@ -9,13 +9,17 @@ Nothing to see here. Getting closer though!
     - Range and Latency and so on controls freeze while rendering
 
 - Engine / Rendering
-    - "Drone Mode" - what is it and how would it work?. I like the idea of cut in
-      half and add fades but controlling that is tricky
+    - Implement the loop modes not just silence and gate only modes
     - Implement polyphonic rendering
     - SFZ won't load in tal sampler. Why?
 
 - Finishing Touches
     - Write a manual
+    - Some code cleanup
+        - Widget SC vs SampleCreator
+        - Widget in CustomWidgets vs between that and module
+        - Module - organize the code more clenaly, add a comment or two
+        - Module state machine less of a spaghetti perhaps
 
 
 - Future Things

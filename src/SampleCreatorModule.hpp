@@ -149,6 +149,15 @@ struct SampleCreatorModule : virtual rack::Module,
         DECENT // few places below we assume DECENT is end, configParam and setting in startRender
     } multiFormat{SFZ};
 
+    enum ReleaseMode
+    {
+        SILENCE,
+        LOOP_005,
+        LOOP_01,
+        LOOP_025,
+        GATEONLY // similarly this is the end of list
+    } releaseMode{SILENCE};
+
     SampleCreatorModule()
     {
         config(NUM_PARAMS, NUM_INPUTS, NUM_OUTPUTS, NUM_LIGHTS);
@@ -184,7 +193,8 @@ struct SampleCreatorModule : virtual rack::Module,
         }
 
         configParam(GATE_TIME, 0.01, 16, 1, "Gate Time", "s");
-        configSwitch(REL_MODE, 0, 1, 0, "Release Mode", {"Silence", "Drone"});
+        configSwitch(REL_MODE, SILENCE, GATEONLY, SILENCE, "Release Mode",
+                     {"Silence", "Loop .05xf", "Loop .1xf", "Loop .25xf", "Gate Only"});
 
         configParam(LATENCY_COMPENSATION, 0, 512, 0, "Latency Compesnation", "Samples");
         configParam(POLYPHONY, 1, 16, 1, "Polyphony", "Voices");
@@ -297,6 +307,7 @@ struct SampleCreatorModule : virtual rack::Module,
         NEW_NOTE,
         GATED_RECORD,
         RELEASE_RECORD,
+        GATE_RELEASE_FADE,
         SPINDOWN_BUFFER,
     } createState{INACTIVE};
 
@@ -316,6 +327,9 @@ struct SampleCreatorModule : virtual rack::Module,
 
     uint64_t gateInitValue{0};
     uint64_t latencyInitValue{0};
+
+    static constexpr int spindownLength{1024};
+    static constexpr int gateOnlyFadeLength{1024};
 
     static constexpr int silenceSamples{4096};
     int silencePosition;
@@ -350,11 +364,14 @@ struct SampleCreatorModule : virtual rack::Module,
             END_RENDER,
             NEW_NOTE, // data is a job index
             CLOSE_FILE,
-            PUSH_SAMPLES // terrible implementation right now
+            PUSH_SAMPLES,
+            PUSH_SINGLE_SAMPLE,
         } message;
 
         int64_t data{0};
         int64_t data2{0};
+
+        float samplL{0.f}, sampR{0.f};
     };
     sst::cpputils::SimpleRingBuffer<RenderThreadCommand, 4096 * 16> renderThreadCommands;
     void renderThreadProcess()
@@ -389,11 +406,14 @@ struct SampleCreatorModule : virtual rack::Module,
                         renderThreadNewNote(oc->data, oc->data2);
                         break;
                     case RenderThreadCommand::CLOSE_FILE:
-                        if (!riffWavWriter.closeFile())
+                        if (riffWavWriter.isOpen())
                         {
-                            pushMessage(riffWavWriter.errMsg);
+                            if (!riffWavWriter.closeFile())
+                            {
+                                pushMessage(riffWavWriter.errMsg);
+                            }
+                            sampleMultiFileAddCurrentJob(renderJobs[oc->data], riffWavWriter);
                         }
-                        sampleMultiFileAddCurrentJob(renderJobs[oc->data], riffWavWriter);
                         break;
                     case RenderThreadCommand::PUSH_SAMPLES:
                     {
@@ -401,6 +421,17 @@ struct SampleCreatorModule : virtual rack::Module,
                         renderThreadWriteBlock(oc->data);
                     }
                     break;
+                    case RenderThreadCommand::PUSH_SINGLE_SAMPLE:
+                    {
+                        if (!testMode && riffWavWriter.isOpen())
+                        {
+                            float f2[2]{oc->samplL, oc->sampR};
+                            riffWavWriter.pushSamples(f2);
+                        }
+                    }
+                    break;
+                    default:
+                        pushError("Unhandled");
                     }
                 }
             }
@@ -762,6 +793,7 @@ struct SampleCreatorModule : virtual rack::Module,
             currentJobIndex = -1;
             latencyInitValue = std::round(getParam(LATENCY_COMPENSATION).getValue());
             gateInitValue = std::ceil(args.sampleRate * getParam(GATE_TIME).getValue());
+            releaseMode = (ReleaseMode)std::round(getParam(REL_MODE).getValue());
 
             auto iv = (int)std::round(getParam(OUTPUT_FORMAT).getValue());
             if (iv < JUST_WAV || iv > DECENT)
@@ -839,9 +871,10 @@ struct SampleCreatorModule : virtual rack::Module,
             pushMessage("Stopping operation");
             clearVU();
 
-            if (!testMode && (createState == GATED_RECORD || createState == RELEASE_RECORD))
+            if (!testMode)
             {
-                renderThreadCommands.push(RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, 0});
+                renderThreadCommands.push(
+                    RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, currentJobIndex});
             }
             createState = INACTIVE;
             currentJobIndex = -1;
@@ -853,9 +886,21 @@ struct SampleCreatorModule : virtual rack::Module,
 
         if (playbackPos > gateSamples && createState == GATED_RECORD)
         {
-            createState = RELEASE_RECORD;
-            memset(&silenceDetector[0], 0, sizeof(silenceDetector));
-            silencePosition = 0;
+            if (releaseMode == SILENCE)
+            {
+                createState = RELEASE_RECORD;
+                memset(&silenceDetector[0], 0, sizeof(silenceDetector));
+                silencePosition = 0;
+            }
+            else if (releaseMode == GATEONLY)
+            {
+                createState = GATE_RELEASE_FADE;
+            }
+            else
+            {
+                pushError("Unhandled loop mode");
+                createState = SPINDOWN_BUFFER;
+            }
 
             playbackPos = 0;
         }
@@ -895,7 +940,34 @@ struct SampleCreatorModule : virtual rack::Module,
             }
         }
 
-        if (createState != SPINDOWN_BUFFER)
+        if (createState == GATE_RELEASE_FADE)
+        {
+            float f2[2];
+            f2[0] = inputs[INPUT_L].getVoltage() / 5.f;
+            f2[1] = inputs[INPUT_R].getVoltage() / 5.f;
+
+            auto dist = 1.0 - 1.0 * playbackPos / gateOnlyFadeLength;
+            f2[0] *= dist;
+            f2[1] *= dist;
+
+            if (!testMode)
+            {
+                renderThreadCommands.push(RenderThreadCommand{
+                    RenderThreadCommand::PUSH_SINGLE_SAMPLE, 0, 0, f2[0], f2[1]});
+            }
+
+            if (playbackPos == gateOnlyFadeLength)
+            {
+                if (!testMode)
+                {
+                    renderThreadCommands.push(
+                        RenderThreadCommand{RenderThreadCommand::CLOSE_FILE, currentJobIndex});
+                }
+                playbackPos = 0;
+                createState = SPINDOWN_BUFFER;
+            }
+        }
+        else if (createState != SPINDOWN_BUFFER)
         {
             if (latencySamples == 0)
             {
@@ -917,7 +989,8 @@ struct SampleCreatorModule : virtual rack::Module,
                 latencySamples--;
         }
 
-        if (playbackPos > 1000 && createState == SPINDOWN_BUFFER)
+        if (playbackPos > spindownLength * (releaseMode == GATEONLY ? 16 : 1) &&
+            createState == SPINDOWN_BUFFER)
         {
             if ((size_t)currentJobIndex == renderJobs.size() - 1)
             {
