@@ -357,7 +357,6 @@ struct SampleCreatorJobsKeyboard : rack::Widget, SampleCreatorSkin::Client
 
     void drawKeyboard(NVGcontext *vg)
     {
-
         auto mks = box.size.x / (en - sn);
 
         for (int i = sn; i < en; ++i)

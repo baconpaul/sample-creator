@@ -14,7 +14,7 @@
     {
       "slug": "SampleCreator",
       "name": "SampleCreator",
-      "description": "Run your patch, make an SFZ",
+      "description": "Run your patch, make an SFZ, Bitwig/Presonus MultiSample or Decent Sampler pack (or just WAVs if thats your thing)",
       "tags": [
         "Utility"
       ]
