@@ -11,7 +11,9 @@ Nothing to see here. Getting closer though!
 - Engine / Rendering
     - Implement the loop modes not just silence and gate only modes
     - Implement polyphonic rendering
-    - SFZ won't load in tal sampler. Why?
+    - Different silence thresholds
+    - Make sure to include start and end notes in range and just divide top
+      and bottom zones accordingly
 
 - Finishing Touches
     - Write a manual

@@ -521,6 +521,11 @@ struct SampleCreatorModule : virtual rack::Module,
             {
                 multiFile << "// Basic SFZ File from Rack Sample Creator\n\n";
                 multiFile << "<global>\n" << std::flush;
+
+                multiFile << "<group>";
+                if (renderJobs.size() > 0 && renderJobs[0].roundRobinOutOf > 1)
+                    multiFile << " seq_length=" << renderJobs[0].roundRobinOutOf;
+                multiFile << "\n";
             }
         }
         break;
@@ -617,13 +622,6 @@ struct SampleCreatorModule : virtual rack::Module,
             if (!multiFile.is_open())
                 return;
 
-            if (currentJob.roundRobinIndex == 0 && currentJob.roundRobinOutOf > 1)
-            {
-                multiFile << "\n<group> "
-                          << " seq_length=" << currentJob.roundRobinOutOf << "\n"
-                          << std::flush;
-            }
-
             multiFile << "<region>";
             if (currentJob.roundRobinOutOf > 1)
                 multiFile << " seq_position=" << (currentJob.roundRobinIndex + 1);
@@ -633,6 +631,7 @@ struct SampleCreatorModule : virtual rack::Module,
                       << " lovel=" << currentJob.velFrom << " hivel=" << currentJob.velTo << "\n"
                       << std::flush;
         }
+        break;
         case DECENT:
         {
             if (!multiFile.is_open())
@@ -674,6 +673,7 @@ struct SampleCreatorModule : virtual rack::Module,
 
             multiFile << "    </sample>\n";
         }
+        break;
         default:
             break;
         }
