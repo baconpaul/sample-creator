@@ -922,7 +922,7 @@ struct SampleCreatorModule : virtual rack::Module,
 
                 while (silent && spos < silenceSamples)
                 {
-                    silent = silenceDetector[spos] < 1e-8;
+                    silent = silenceDetector[spos] < 1e-6;
                     spos++;
                 }
 
