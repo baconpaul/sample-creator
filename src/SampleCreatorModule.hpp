@@ -734,8 +734,8 @@ struct SampleCreatorModule : virtual rack::Module,
                 auto mv = (int)std::round(std::clamp(fn(bv), 0., 1.) * 128);
                 auto msv = (int)std::round(std::clamp(fn(sv), 0., 1.) * 128);
                 auto mev = (int)std::round(std::clamp(fn(ev), 0., 1.) * 128) - 1;
-                msv = std::clamp(msv, 0, 127);
-                mev = std::clamp(mev, 0, 127);
+                msv = std::clamp(msv, 1, 127);
+                mev = std::clamp(mev, 1, 127); // we can't use 0 since thats 'off'
                 mv = std::clamp(mv, msv, mev);
 
                 auto vrj = mrj;
